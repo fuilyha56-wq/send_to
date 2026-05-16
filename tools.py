@@ -157,9 +157,12 @@ class LookupUsersTool(BaseTool):
                 record["match"] = "partial"
                 partial.append(record)
 
-            if len(exact) + len(partial) >= normalized_limit * 3:
+            # 仅当精确匹配数已经足够时才提前终止，
+            # 确保不会因为模糊匹配占满配额而漏掉后续的精确匹配
+            if len(exact) >= normalized_limit * 3:
                 break
 
+        # 精确匹配优先排序，确保 LLM 最先看到最相关的结果
         combined = (exact + partial)[:normalized_limit]
 
         return True, {
