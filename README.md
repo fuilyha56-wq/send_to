@@ -21,6 +21,7 @@ send_to 让 LLM 可以主动将消息发送到**其他**聊天流（群聊或私
 | Action | `send_to` | 向其他聊天流发送文本消息 |
 | Tool | `send_to_list_groups` | 列出 bot 可见的群聊，辅助定位 group_id |
 | Tool | `send_to_lookup_users` | 按昵称/群名片查找用户候选，辅助定位 user_id |
+| EventHandler | `send_to_wander` | （可选）监听消息，由 sub_actor 决策是否主动"串门"到其他聊天流 |
 
 ---
 
@@ -53,8 +54,11 @@ send_to/
 ├── __init__.py              # 插件声明
 ├── manifest.json            # 插件元数据
 ├── plugin.py                # 插件入口，注册组件
+├── config.py                # 插件配置（含串门相关参数与默认提示词）
 ├── action.py                # send_to Action 实现
-└── tools.py                 # send_to_list_groups 和 send_to_lookup_users 工具
+├── _resolve.py              # action 与 wander 共用的 group_hint 解析
+├── tools.py                 # send_to_list_groups 和 send_to_lookup_users 工具
+└── wander.py                # 串门 EventHandler（可选）
 ```
 
 ---
@@ -182,7 +186,87 @@ send_to(target_type="group", group_id="123456", content="你好")
 
 - `send_to` 仅用于跨流发送，目标是当前会话时会拒绝并提示直接回复
 - `group_hint` 和 `user_hint` 做唯一性匹配，多命中时返回歧义提示需用户确认
-- 无额外配置文件，插件开箱即用
+- 串门功能 (`send_to_wander`) 默认关闭，启用前请仔细阅读下方"串门模式"章节
+
+---
+
+## 串门模式（可选，默认关闭）
+
+`send_to_wander` 是一个 EventHandler 形态的组件，让 bot **被启发式**地主动跑去其他聊天流发言：bot 在观察到任意消息时，由 sub_actor 模型独立判断"是否要去某个其他群顺嘴搭一句"。
+
+**这不是定时器**——它只在收到消息时被触发，搭不搭话由 LLM 结合源流近期话题与候选目标的近期话题来决定。
+
+### 设计原则：默认让 bot 闭嘴
+
+- 一阶段廉价过滤就把绝大多数消息挡在门外（默认 8% 概率才进 LLM 决策）
+- system 提示词被刻意"凹"成内敛社恐人格，**默认行为是 go=false**
+- 候选目标必须最近 30 分钟内有活动，且通过单目标冷却（默认 60 分钟）
+- 全局冷却（默认 180 秒）+ 每小时上限（默认 4 次）
+- 静默时段（默认 1:00–7:00 不串门）
+- 跨平台串门一律拒绝，目标必须在候选集合内（防 LLM 编造 stream_id）
+
+### 配置示例
+
+`config/plugins/send_to/config.toml`：
+
+```toml
+[wander]
+enabled = true
+dry_run = true                # 第一次启用建议保持 true，看日志确认效果
+decision_model = ""           # 留空走 model_tasks.sub_actor
+
+pre_pass_probability = 0.08   # 一阶段过滤通过概率（凹得很低）
+global_cooldown_sec = 180     # 全局冷却（秒）
+per_target_cooldown_min = 60  # 单目标冷却（分钟）
+max_per_hour = 4              # 每小时最多串门次数
+active_window_min = 30        # 候选目标必须最近 N 分钟内活跃
+candidate_top_k = 5
+context_messages = 8
+target_preview_messages = 3
+
+quiet_hours_start = 1         # 静默时段（24h 制，[start, end)）
+quiet_hours_end = 7
+
+source_scope_mode = "blacklist"  # 监听哪些源流的消息
+source_groups = []
+source_users = []
+
+target_scope_mode = "whitelist"  # 允许串去哪些目标（建议白名单）
+target_groups = ["123456789"]
+target_users = []
+allow_private_target = false     # 私聊串门总开关（默认关）
+
+decision_temperature = 0.2
+decision_max_tokens = 300
+```
+
+### 启用流程建议
+
+1. `enabled = true, dry_run = true` 起步，观察 `[wander]` 日志中决策频率与内容
+2. 如果 LLM 偏向 go=true 太多，下调 `pre_pass_probability` 或修改 `prompts.system_prompt` 加强限制
+3. 验收通过再 `dry_run = false`，正式启用
+4. 调整 `target_groups` 白名单，先在小范围群验证
+
+### 工作流程
+
+```
+收到消息 → 同步过滤（静默时段/冷却/概率/源流范围）→ 派发后台任务
+        ↓
+    加载源流近期上下文 + 候选目标列表（已过滤冷却）
+        ↓
+    sub_actor 决策（强制 JSON: {"go": bool, "target_stream_id", "content", "why"}）
+        ↓
+    通过候选集合校验 + 跨平台校验 → 发送（或 dry_run 仅打日志）
+        ↓
+    更新冷却状态
+```
+
+### 日志关键字
+
+- `[wander][DRY_RUN] 决策串门 -> ...`：空跑模式下的决策日志
+- `[wander] 串门成功 -> ...`：实际发送
+- `[wander] 决策不串门：why=...`：被 LLM 拒绝
+- `[wander] LLM 选择的目标 ... 不在候选集合中`：LLM 编造 stream_id 已拦截
 
 ---
 
