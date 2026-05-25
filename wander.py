@@ -348,7 +348,7 @@ class WanderEventHandler(BaseEventHandler):
     handler_description: str = "观察消息时按 sub_actor 决策偶尔主动串门到其他聊天流"
     weight: int = 5
     intercept_message: bool = False
-    init_subscribe: list[str] = [EventType.ON_MESSAGE_RECEIVED]
+    init_subscribe: list[EventType | str] = [EventType.ON_MESSAGE_RECEIVED]
 
     def _get_config(self) -> "SendToConfig | None":
         from .config import SendToConfig

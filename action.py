@@ -13,8 +13,8 @@ from typing import Annotated, Any, AsyncGenerator, cast
 
 from src.app.plugin_system.api.action_api import execute_action
 from src.app.plugin_system.api.send_api import send_text
-from src.core.components.base.action import BaseAction
-from src.core.models.message import Message, MessageType
+from src.app.plugin_system.base import BaseAction
+from src.app.plugin_system.types import Message, MessageType
 from src.core.models.sql_alchemy import ChatStreams, PersonInfo
 from src.core.models.stream import ChatStream
 from src.core.utils.user_query_helper import get_user_query_helper
@@ -515,3 +515,69 @@ class SendToExecuteAction(BaseAction):
         )
 
         yield ok, f"在目标{target_desc}中执行 {normalized_sig}：{'成功' if ok else '失败'}，{result}"
+
+
+
+class SendToSummaryUpdateAction(BaseAction):
+    """为当前聊天流写入最新摘要并同步跨流 reminder。"""
+
+    action_name: str = "send_to_update_stream_summary"
+    action_description: str = (
+        "为当前聊天流写入最新摘要，并同步到 send_to 的跨聊天流 system reminder。"
+        "仅当当前摘要明显失真、遗漏关键事实或需要立刻记录跨流约定时调用。"
+        "输入必须是客观、完整、覆盖旧摘要的新摘要。"
+    )
+    chatter_allow: list[str] = []
+
+    async def execute(
+        self,
+        summary: Annotated[str, "当前聊天流最新纠偏摘要，覆盖旧摘要而不是追加"],
+    ) -> tuple[bool, str]:
+        from .stream_index import sync_actor_reminder, upsert_summary
+
+        try:
+            changed = await upsert_summary(self.plugin, self.chat_stream, summary)
+            await sync_actor_reminder(self.plugin)
+        except ValueError as error:
+            return False, str(error)
+
+        stream_name = self.chat_stream.stream_name or self.chat_stream.stream_id[:8]
+        if changed:
+            return True, f"已更新聊天流 {stream_name} 的跨流摘要并同步 reminder"
+        return True, f"聊天流 {stream_name} 的摘要无变化，已同步 reminder"
+
+
+class SendToRelayIntentAction(BaseAction):
+    """跨聊天流转告：将意图和上下文注入另一个聊天流。"""
+
+    action_name: str = "send_to_relay_intent"
+    action_description: str = (
+        "跨聊天流意识迁移/转告能力。与 send_to 直接发文本不同，"
+        "此 Action 会把开场白、来源上下文和内部提示注入目标流，由目标流的 bot 自然续接。"
+        "调用前建议先用 send_to_find_stream 获取 target_stream_id / target_user_id / target_group_id。"
+    )
+    chatter_allow: list[str] = []
+
+    async def execute(
+        self,
+        target_stream_id: Annotated[str, "目标聊天流 ID，通常来自 send_to_find_stream"] = "",
+        relay_content: Annotated[str, "在目标流的自然开场白，包含来源说明和话题承接"] = "",
+        context_message_count: Annotated[int, "携带几条源流原始消息作为记忆凭证"] = 10,
+        opening_hint: Annotated[str, "给目标流自己的内部提示，用户不可见"] = "",
+        target_platform: Annotated[str, "目标平台标识，默认 qq"] = "qq",
+        target_user_id: Annotated[str, "私聊目标用户 ID"] = "",
+        target_group_id: Annotated[str, "群聊目标群号"] = "",
+    ) -> tuple[bool, str]:
+        from .relay import relay_intent
+
+        return await relay_intent(
+            plugin=self.plugin,
+            chat_stream=self.chat_stream,
+            target_stream_id=target_stream_id,
+            relay_content=relay_content,
+            context_message_count=context_message_count,
+            opening_hint=opening_hint,
+            target_platform=target_platform,
+            target_user_id=target_user_id,
+            target_group_id=target_group_id,
+        )
