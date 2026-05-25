@@ -1,0 +1,54 @@
+{
+    "name": "send_to",
+    "version": "2.0.0",
+    "description": "让 LLM 主动把消息发送到其他聊天流（群或某人私聊），或在目标流中执行指定动作",
+    "author": "MoFox Team",
+    "license": "GPL-3.0",
+    "dependencies": {
+        "plugins": [],
+        "components": []
+    },
+    "include": [
+        {
+            "component_type": "action",
+            "component_name": "send_to",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "action",
+            "component_name": "send_to_execute",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_list_groups",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_list_users",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_lookup_users",
+            "dependencies": [],
+            "enabled": true
+        }
+    ],
+    "entry_point": "plugin.py",
+    "min_core_version": "1.0.0",
+    "display_name": "send_to",
+    "categories": [
+        "tool"
+    ],
+    "tags": [
+        "tool",
+        "chat",
+        "Chat flow specialization"
+    ]
+}
