@@ -1,7 +1,7 @@
 {
     "name": "send_to",
     "version": "2.0.0",
-    "description": "让 LLM 主动把消息发送到其他聊天流（群或某人私聊），或在目标流中执行指定动作",
+    "description": "让 LLM 主动把消息发送到其他聊天流（群或某人私聊），或在目标流中执行指定动作，支持 sub_actor 决策的被启发式串门",
     "author": "MoFox Team",
     "license": "GPL-3.0",
     "dependencies": {
@@ -36,6 +36,13 @@
         {
             "component_type": "tool",
             "component_name": "send_to_lookup_users",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "event_handler",
+            "component_name": "send_to_wander",
+            "description": "监听消息事件，由 sub_actor 决策是否主动串门到其他聊天流（默认关闭）",
             "dependencies": [],
             "enabled": true
         }
