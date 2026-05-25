@@ -35,11 +35,12 @@ class SendToAutoSummaryHandler(BaseEventHandler):
         if not isinstance(message, Message):
             return EventDecision.SUCCESS, params
 
-        await sync_actor_reminder(
-            self.plugin,
-            current_chat_type=message.chat_type,
-            current_stream_id=str(message.stream_id or ""),
-        )
+        if config.index.inject_summary_reminder:
+            await sync_actor_reminder(
+                self.plugin,
+                current_chat_type=message.chat_type,
+                current_stream_id=str(message.stream_id or ""),
+            )
         direction = "outbound" if event_name == EventType.ON_MESSAGE_SENT.value else "inbound"
 
         async def _run_summary() -> None:
@@ -53,11 +54,12 @@ class SendToAutoSummaryHandler(BaseEventHandler):
             try:
                 if direction == "outbound":
                     await register_bot_message(self.plugin, message)
-                    await sync_actor_reminder(
-                        self.plugin,
-                        current_chat_type=message.chat_type,
-                        current_stream_id=str(message.stream_id or ""),
-                    )
+                    if config.index.inject_summary_reminder:
+                        await sync_actor_reminder(
+                            self.plugin,
+                            current_chat_type=message.chat_type,
+                            current_stream_id=str(message.stream_id or ""),
+                        )
                 else:
                     await register_inbound_message(self.plugin, message)
             except Exception as error:

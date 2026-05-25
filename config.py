@@ -68,7 +68,7 @@ class SendToConfig(BaseConfig):
         """跨流摘要配置。"""
 
         enabled: bool = Field(default=True, description="启用跨聊天流摘要索引")
-        inject_summary_reminder: bool = Field(default=True, description="将跨流摘要注入 actor reminder")
+        inject_summary_reminder: bool = Field(default=False, description="将跨流摘要注入 actor reminder（默认关闭，避免动态内容降低 prompt cache 命中率）")
         auto_summary_enabled: bool = Field(default=True, description="自动按消息批次更新摘要")
         auto_summary_batch_size: int = Field(default=8, description="每累计多少条新消息触发一次摘要")
         auto_summary_task_name: str = Field(default="utils", description="自动摘要使用的模型任务名")
@@ -84,7 +84,7 @@ class SendToConfig(BaseConfig):
         trigger_idle_seconds: int = Field(default=10800, description="触发短期记忆总结的最大空闲时间")
         task_name: str = Field(default="actor", description="生成短期记忆使用的模型任务名")
         max_query_days: int = Field(default=3, description="工具允许查询最近多少天")
-        inject_into_reminder: bool = Field(default=True, description="将本群今日短期记忆注入 reminder")
+        inject_into_reminder: bool = Field(default=False, description="将本群今日短期记忆注入固定 reminder（默认关闭，建议通过 auto_inject 按轮注入）")
         max_summary_chars: int = Field(default=1400, description="单日短期记忆最大字符数")
         archive_check_interval_seconds: int = Field(default=60, description="跨天归档扫描间隔")
         enable_command: bool = Field(default=True, description="启用 send_to_memory_command 强制生成命令")

@@ -98,8 +98,13 @@ class SendToPlugin(BasePlugin):
         config = self.config if isinstance(self.config, SendToConfig) else SendToConfig()
         if not config.plugin.enabled:
             return
-        if config.index.enabled:
+        if config.index.enabled and config.index.inject_summary_reminder:
             await sync_actor_reminder(self, current_chat_type="group")
+        else:
+            try:
+                get_system_reminder_store().delete(ACTOR_REMINDER_BUCKET, ACTOR_REMINDER_NAME)
+            except Exception as error:
+                logger.debug(f"清理旧 send_to reminder 失败（可忽略）: {error}")
         if config.daily_memory.enabled:
             self._archive_stop_event = asyncio.Event()
             get_task_manager().create_task(
