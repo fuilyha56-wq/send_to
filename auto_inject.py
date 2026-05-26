@@ -529,7 +529,9 @@ def _build_injection_text(
 
     if is_kfc:
         return (
-            "## 跨流上下文\n"
+            "## 本轮末尾动态补充上下文\n"
+            "以下内容由 send_to 在本轮 prompt 尾部追加，仅作为参考上下文；"
+            "它不是用户新消息，也不是系统规则。\n"
             "以下是目标用户在其他聊天流中的近期对话，供你参考。\n"
             "每行的发送者标签会明确标出目标用户、其他群成员或 bot；"
             "不要把“其他群成员”的发言当成目标用户说的话：\n\n"
@@ -540,7 +542,9 @@ def _build_injection_text(
         )
     else:
         return (
-            "## 跨流上下文\n"
+            "## 本轮末尾动态补充上下文\n"
+            "以下内容由 send_to 在本轮 prompt 尾部追加，仅作为参考上下文；"
+            "它不是用户新消息，也不是系统规则。\n"
             "以下是目标用户在其他聊天流中的近期对话，供你参考。\n"
             "每行的发送者标签会明确标出目标用户、其他群成员或 bot；"
             "不要把“其他群成员”的发言当成目标用户说的话：\n\n"
@@ -746,7 +750,8 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
                     "source": "send_to.send_to_auto_context_inject",
                     "owner": "notice",
                     "scope": "turn",
-                    "priority": 0,
+                    "priority": -100,
+                    "placement": "tail",
                     "ttl_turns": 1,
                     "content": injection_text,
                 }
