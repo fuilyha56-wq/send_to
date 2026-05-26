@@ -20,6 +20,7 @@ sys.modules.setdefault("src.kernel.event", types.SimpleNamespace(EventDecision=t
 sys.modules.setdefault("send_to.config", types.SimpleNamespace(SendToConfig=object))
 
 from send_to.auto_inject import (
+    _build_injection_text,
     _format_actor_label,
     _resolve_effective_person_id,
 )
@@ -67,3 +68,40 @@ def test_actor_label_marks_non_target_group_members_as_other():
     assert "person_id=person_123" in target_label
     assert other_label.startswith("其他群成员(")
     assert "person_id=person_a" in other_label
+
+
+def test_injection_text_declares_tail_dynamic_context():
+    """自动注入文本应声明自己是末尾动态补充上下文。"""
+    text = _build_injection_text(
+        [
+            {
+                "scope_label": "群聊",
+                "stream_name": "测试群",
+                "timeline": "[2026-05-26 12:00:00] 其他群成员(阿A / id=a / person_id=person_a): hello",
+            }
+        ],
+        is_kfc=True,
+    )
+
+    assert text.startswith("## 本轮末尾动态补充上下文")
+    assert "不是用户新消息" in text
+    assert "不是系统规则" in text
+
+
+def test_tail_context_contribution_payload_uses_low_priority_tail_metadata():
+    """send_to 的 context contribution 应带低优先级尾部放置元数据。"""
+    contribution = {
+        "source": "send_to.send_to_auto_context_inject",
+        "owner": "notice",
+        "scope": "turn",
+        "priority": -100,
+        "placement": "tail",
+        "ttl_turns": 1,
+        "content": "## 本轮末尾动态补充上下文\n正文",
+    }
+
+    assert contribution["owner"] == "notice"
+    assert contribution["scope"] == "turn"
+    assert contribution["priority"] == -100
+    assert contribution["placement"] == "tail"
+    assert contribution["ttl_turns"] == 1
