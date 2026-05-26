@@ -201,6 +201,29 @@ def _resolve_trigger_person_id_from_messages(
     return fallback_person_id
 
 
+def _resolve_effective_person_id(
+    values: dict[str, Any],
+    *,
+    current_stream: Any,
+    chat_type: str,
+    recent_messages: list[Any],
+    trigger_sender_id: str = "",
+) -> str:
+    """解析本轮跨流注入的目标用户，群聊优先使用触发消息用户。"""
+    stream_person_id = _normalize_text(getattr(current_stream, "person_id", ""))
+    trigger_person_id = _extract_trigger_person_id(values)
+    if chat_type == "group":
+        if trigger_person_id:
+            return trigger_person_id
+        resolved_person_id = _resolve_trigger_person_id_from_messages(
+            recent_messages,
+            bot_id=str(getattr(current_stream, "bot_id", "") or ""),
+            trigger_sender_id=trigger_sender_id,
+        )
+        return resolved_person_id or stream_person_id
+    return trigger_person_id or stream_person_id
+
+
 def _format_actor_label(
     *,
     sender_name: str,
@@ -649,7 +672,9 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
             if now - self._recent_queries[stream_id] < cooldown:
                 return EventDecision.SUCCESS, params
 
-        # 解析当前流的平台和 person_id
+        # 解析当前流的平台和 person_id。
+        # 群聊必须优先使用本轮触发消息用户；ChatStreams.person_id 在群聊里可能只是流级占位，
+        # 不能用它把所有注入消息都归因到同一个用户。
         current_rows = await (
             QueryBuilder(ChatStreams)
             .filter(stream_id=stream_id)
@@ -662,15 +687,9 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
         current_stream = current_rows[0]
         platform = str(getattr(current_stream, "platform", "") or "")
         chat_type = str(getattr(current_stream, "chat_type", "") or "")
-        person_id = str(getattr(current_stream, "person_id", "") or "")
-        trigger_person_id = _extract_trigger_person_id(values)
         trigger_sender_id = _extract_trigger_sender_id(values)
-        if trigger_person_id:
-            person_id = trigger_person_id
-
-        # 群聊的 ChatStreams.person_id 可能并非真正用户 ID，
-        # 需要从 prompt 元数据或该流最近的消息中获取触发本次 prompt 的用户。
-        if chat_type == "group" and not person_id:
+        recent_msgs: list[Any] = []
+        if chat_type == "group":
             recent_msgs = await (
                 QueryBuilder(Messages)
                 .filter(stream_id=stream_id, platform=platform)
@@ -678,11 +697,13 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
                 .limit(10)
                 .all()
             )
-            person_id = _resolve_trigger_person_id_from_messages(
-                recent_msgs,
-                bot_id=str(getattr(current_stream, "bot_id", "") or ""),
-                trigger_sender_id=trigger_sender_id,
-            )
+        person_id = _resolve_effective_person_id(
+            values,
+            current_stream=current_stream,
+            chat_type=chat_type,
+            recent_messages=recent_msgs,
+            trigger_sender_id=trigger_sender_id,
+        )
 
         if not platform or not person_id:
             return EventDecision.SUCCESS, params
