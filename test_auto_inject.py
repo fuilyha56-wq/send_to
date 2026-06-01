@@ -5,6 +5,8 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 PLUGIN_DIR = Path(__file__).resolve().parent
 ROOT_DIR = PLUGIN_DIR.parents[1]
 sys.path.insert(0, str(PLUGIN_DIR))
@@ -21,6 +23,7 @@ sys.modules.setdefault("send_to.config", types.SimpleNamespace(SendToConfig=obje
 
 from send_to.auto_inject import (
     _build_injection_text,
+    _build_summary_injection_text,
     _format_actor_label,
     _resolve_effective_person_id,
 )
@@ -105,3 +108,21 @@ def test_tail_context_contribution_payload_uses_low_priority_tail_metadata():
     assert contribution["priority"] == -100
     assert contribution["placement"] == "tail"
     assert contribution["ttl_turns"] == 1
+
+
+@pytest.mark.asyncio
+async def test_summary_injection_skips_when_actor_reminder_enabled():
+    """actor reminder 已注入摘要时，auto_inject 不再重复注入摘要索引。"""
+    plugin = SimpleNamespace(config=SimpleNamespace(
+        index=SimpleNamespace(enabled=True, inject_summary_reminder=True),
+        auto_inject=SimpleNamespace(include_summary_index=True),
+    ))
+
+    text = await _build_summary_injection_text(
+        plugin,
+        current_chat_type="group",
+        current_stream_id="stream_1",
+        limit=6,
+    )
+
+    assert text == ""

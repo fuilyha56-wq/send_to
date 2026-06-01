@@ -20,6 +20,8 @@ from src.core.models.message import Message
 
 
 from .config import SendToConfig
+from .daily_memory import get_today_memory_for_stream
+from .privacy import should_collect_message, should_show_in_reminder
 
 ACTOR_REMINDER_BUCKET = "actor"
 ACTOR_REMINDER_NAME = "跨聊天流上下文摘要"
@@ -443,8 +445,6 @@ async def collect_message_for_auto_summary(
 ) -> bool:
     """收集消息并在达到阈值后用 utils 模型自动更新摘要。"""
 
-    from .privacy import should_collect_message
-
     config = _get_config(plugin)
     if not config.index.auto_summary_enabled:
         return False
@@ -561,8 +561,6 @@ def build_actor_reminder(
         today_memory_date: 当前群当日短期记忆对应日期
     """
 
-    from .privacy import should_show_in_reminder
-
     config = _get_config(plugin)
 
     lines = [
@@ -641,7 +639,6 @@ async def sync_actor_reminder(
         and config.daily_memory.enabled
         and config.daily_memory.inject_into_reminder
     ):
-        from .daily_memory import get_today_memory_for_stream
         record = await get_today_memory_for_stream(plugin, current_stream_id)
         if record is not None:
             today_memory_summary = record.summary

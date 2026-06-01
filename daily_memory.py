@@ -35,6 +35,7 @@ from src.core.config import get_core_config
 from src.core.models.message import Message
 
 from .config import SendToConfig
+from .privacy import _check_list
 
 if TYPE_CHECKING:
     pass
@@ -515,8 +516,6 @@ async def _load_state_of(plugin: Any, stream_id: str) -> DailyState | None:
 
 def _is_group_allowed(config: SendToConfig, group_id: str) -> bool:
     """根据现有群名单判断是否允许参与短期记忆。"""
-
-    from .privacy import _check_list  # 复用同一份名单逻辑
 
     if not group_id:
         return True

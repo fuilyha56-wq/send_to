@@ -465,6 +465,10 @@ async def _build_summary_injection_text(
     if not config.index.enabled or not config.auto_inject.include_summary_index:
         return ""
 
+    # 如果 actor reminder 已启用摘要注入，跳过 auto_inject 的 summary，避免双重注入
+    if config.index.inject_summary_reminder:
+        return ""
+
     try:
         records = await list_summary_records(plugin)
     except Exception as exc:
