@@ -1,0 +1,501 @@
+{
+  "scout": {
+    "project_name": "send_to",
+    "tech_stack": [
+      "python",
+      "3.11",
+      "neo-mofox-plugin"
+    ],
+    "source_root": "E:\\neo-mofox-instance\\bot-3693525299\\neo-mofox\\plugins\\send_to",
+    "modules": [
+      {
+        "path": "plugin.py",
+        "description": "插件入口和动态组件注册",
+        "estimated_files": 1
+      },
+      {
+        "path": "config.py",
+        "description": "统一配置管理（TOML风格配置类）",
+        "estimated_files": 1
+      },
+      {
+        "path": "action.py",
+        "description": "跨流发送、执行、摘要更新、relay转告等Action",
+        "estimated_files": 1
+      },
+      {
+        "path": "tools.py",
+        "description": "目标查找、上下文查询、记忆查询等Tool",
+        "estimated_files": 1
+      },
+      {
+        "path": "event_handler.py",
+        "description": "自动摘要和每日记忆事件处理",
+        "estimated_files": 1
+      },
+      {
+        "path": "auto_inject.py",
+        "description": "自动跨流上下文注入",
+        "estimated_files": 1
+      },
+      {
+        "path": "stream_index.py",
+        "description": "跨流摘要存储和reminder同步",
+        "estimated_files": 1
+      },
+      {
+        "path": "daily_memory.py",
+        "description": "每日短期记忆",
+        "estimated_files": 1
+      },
+      {
+        "path": "context_lookup.py",
+        "description": "用户上下文与长期记忆查询逻辑",
+        "estimated_files": 1
+      },
+      {
+        "path": "privacy.py",
+        "description": "隐私和黑白名单过滤",
+        "estimated_files": 1
+      },
+      {
+        "path": "relay.py",
+        "description": "relay虚拟消息注入",
+        "estimated_files": 1
+      },
+      {
+        "path": "commands.py",
+        "description": "短期记忆和relay调试命令",
+        "estimated_files": 1
+      },
+      {
+        "path": "wander.py",
+        "description": "自动串门（主动跨流发言）",
+        "estimated_files": 1
+      }
+    ],
+    "config_files": [
+      "manifest.json"
+    ],
+    "test_directory": "根目录（test_auto_inject.py）",
+    "build_system": "neo-mofox插件系统（无独立构建）",
+    "virtual_environment": "未检测到",
+    "key_files": [
+      "README.md",
+      "manifest.json",
+      "plugin.py",
+      "config.py"
+    ]
+  },
+  "gitignore": {
+    "rules_count": 35,
+    "ignored_modules": []
+  },
+  "modules": [
+    {
+      "path": "plugin.py",
+      "report": {
+        "module_path": "plugin.py",
+        "purpose": "send_to 插件的入口文件，负责插件注册、动态组件注册和生命周期管理。该插件提供跨聊天流发送、上下文索引、短期记忆、relay 转告与可选自动注入等能力，是 Neo-MoFox 机器人框架的核心插件之一。",
+        "key_classes": [
+          {
+            "name": "SendToPlugin",
+            "file": "plugin.py",
+            "description": "send_to 插件主类，继承 BasePlugin，通过 @register_plugin 装饰器注册。负责根据配置动态返回组件列表，管理插件生命周期（加载/卸载）。包含跨聊天流发送、上下文、记忆和转告功能。"
+          },
+          {
+            "name": "SendToConfig",
+            "file": "config.py",
+            "description": "插件配置类，继承 BaseConfig。包含 plugin、dispatch、relay、index、daily_memory、lookup、auto_inject、privacy、wander、prompts 等多个配置分区，采用嵌套 Section 模式组织。"
+          },
+          {
+            "name": "SendToAction",
+            "file": "action.py",
+            "description": "跨聊天流发送文本的 Action 组件，让 LLM 主动向其他聊天流发送消息。"
+          },
+          {
+            "name": "SendToExecuteAction",
+            "file": "action.py",
+            "description": "跨聊天流执行 Action 的组件，能力较强，默认关闭。"
+          },
+          {
+            "name": "SendToRelayIntentAction",
+            "file": "action.py",
+            "description": "Relay 转告 Action，将开场白、来源上下文注入目标流并冷启动，默认关闭。"
+          },
+          {
+            "name": "SendToSummaryUpdateAction",
+            "file": "action.py",
+            "description": "手动触发跨流摘要更新的 Action。"
+          },
+          {
+            "name": "ListGroupsTool",
+            "file": "tools.py",
+            "description": "列出 bot 可见群聊的 Tool 组件。"
+          },
+          {
+            "name": "ListUsersTool",
+            "file": "tools.py",
+            "description": "列出 bot 已知用户的 Tool 组件。"
+          },
+          {
+            "name": "LookupUsersTool",
+            "file": "tools.py",
+            "description": "按昵称/群名片查找用户的 Tool 组件。"
+          },
+          {
+            "name": "SendToStreamContextTool",
+            "file": "tools.py",
+            "description": "查询其他聊天流原始消息和摘要的 Tool。"
+          },
+          {
+            "name": "SendToDailyMemoryTool",
+            "file": "tools.py",
+            "description": "查询群聊每日短期记忆的 Tool。"
+          },
+          {
+            "name": "SendToFindStreamTool",
+            "file": "tools.py",
+            "description": "根据名称、索引、QQ、群号、stream_id 查找目标流的 Tool。"
+          },
+          {
+            "name": "SendToUserMemoryTool",
+            "file": "tools.py",
+            "description": "查询用户相关长期记忆的 Tool。"
+          },
+          {
+            "name": "SendToUserContextTool",
+            "file": "tools.py",
+            "description": "按用户查询相关私聊/群聊近期上下文的 Tool。"
+          },
+          {
+            "name": "SendToAutoSummaryHandler",
+            "file": "event_handler.py",
+            "description": "自动摘要事件处理器，订阅 ON_MESSAGE_RECEIVED 和 ON_MESSAGE_SENT 事件，按批次触发自动摘要和每日短期记忆更新。"
+          },
+          {
+            "name": "WanderEventHandler",
+            "file": "wander.py",
+            "description": "自动串门事件处理器，由 sub_actor 决策是否主动跑去其他聊天流发言，默认关闭且 dry-run。"
+          },
+          {
+            "name": "SendToAutoContextInjectHandler",
+            "file": "auto_inject.py",
+            "description": "自动跨流上下文注入事件处理器，监听 on_prompt_build 事件，自动注入跨流摘要和用户近期上下文。"
+          },
+          {
+            "name": "SendToMemoryCommand",
+            "file": "commands.py",
+            "description": "手动强制生成当前群当日短期记忆的 Command，仅主人可用。"
+          },
+          {
+            "name": "SendToRelayDebugCommand",
+            "file": "commands.py",
+            "description": "Relay 调试命令，默认关闭。"
+          }
+        ],
+        "key_functions": [
+          {
+            "name": "get_components",
+            "file": "plugin.py",
+            "description": "SendToPlugin 的核心方法，根据 SendToConfig 配置动态决定注册哪些组件。这是插件动态组件注册的关键入口，返回组件类列表供插件框架实例化。"
+          },
+          {
+            "name": "on_plugin_loaded",
+            "file": "plugin.py",
+            "description": "插件加载后的回调，同步 actor reminder 并启动每日短期记忆归档后台循环任务。"
+          },
+          {
+            "name": "on_plugin_unloaded",
+            "file": "plugin.py",
+            "description": "插件卸载时的回调，停止归档循环并清理 reminder。"
+          },
+          {
+            "name": "sync_actor_reminder",
+            "file": "stream_index.py",
+            "description": "同步跨聊天流摘要到 actor reminder，使 LLM 在决策时能看到全局上下文摘要。"
+          },
+          {
+            "name": "run_archive_loop",
+            "file": "daily_memory.py",
+            "description": "每日短期记忆归档循环，作为后台守护任务运行，处理跨天归档。"
+          }
+        ],
+        "dependencies": [
+          "src.app.plugin_system.base (BasePlugin, register_plugin)",
+          "src.app.plugin_system.api.action_api",
+          "src.app.plugin_system.api.send_api",
+          "src.app.plugin_system.types",
+          "src.core.prompt (get_system_reminder_store)",
+          "src.kernel.concurrency (get_task_manager)",
+          "src.kernel.logger (get_logger)",
+          "src.core.models.sql_alchemy (ChatStreams, PersonInfo)",
+          "src.core.models.stream (ChatStream)",
+          "src.kernel.db (QueryBuilder)"
+        ],
+        "patterns": [
+          "装饰器模式：@register_plugin 用于插件类注册",
+          "策略模式：get_components() 根据配置动态选择注册不同组件",
+          "配置驱动设计：所有组件注册均受 SendToConfig 控制",
+          "生命周期钩子模式：on_plugin_loaded / on_plugin_unloaded",
+          "延迟导入：auto_inject 组件使用条件延迟导入，避免循环依赖",
+          "后台任务管理：使用 get_task_manager().create_task() 启动守护任务"
+        ],
+        "public_api": [
+          "SendToPlugin (插件主类)",
+          "SendToConfig (配置类)",
+          "get_components() -> list[type] (动态组件注册接口)",
+          "on_plugin_loaded() (生命周期钩子)",
+          "on_plugin_unloaded() (生命周期钩子)"
+        ],
+        "summary": "plugin.py 是 send_to 插件的核心入口文件，采用装饰器模式通过 @register_plugin 注册 SendToPlugin 类。其核心设计是配置驱动的动态组件注册：get_components() 方法根据 SendToConfig 的多个配置分区（dispatch、index、lookup、relay、auto_inject、wander 等）条件性地返回不同的组件类列表，实现高度模块化的功能开关控制。插件生命周期管理完善，加载时同步 reminder 并启动归档守护任务，卸载时优雅清理。整个插件整合了原 send_to、context_bridge_tool、cross_stream_relay 的能力，提供跨流发送、上下文查询、记忆管理、自动摘要、relay 转告和自动串门等丰富功能，高风险功能默认关闭，体现了安全优先的设计理念。"
+      },
+      "success": true
+    },
+    {
+      "path": "config.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "action.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "tools.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "event_handler.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "auto_inject.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "stream_index.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "daily_memory.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "context_lookup.py",
+      "report": {
+        "module_path": "context_lookup.py",
+        "purpose": "send_to 插件的用户上下文与长期记忆查询逻辑模块。提供按用户检索跨聊天流近期上下文（lookup_user_context）和长期记忆（lookup_user_memory）的核心能力，支持私聊/群聊范围过滤、黑白名单控制、隐私脱敏和角色标注。",
+        "key_classes": [],
+        "key_functions": [
+          {
+            "name": "get_config",
+            "file": "context_lookup.py",
+            "description": "读取插件配置，失败时返回默认 SendToConfig"
+          },
+          {
+            "name": "clamp_int",
+            "file": "context_lookup.py",
+            "description": "将整数压入指定范围，用于参数安全校验"
+          },
+          {
+            "name": "normalize_text",
+            "file": "context_lookup.py",
+            "description": "清理文本参数（去空格）"
+          },
+          {
+            "name": "normalize_chat_scope",
+            "file": "context_lookup.py",
+            "description": "规范化聊天范围（private/group/all），并检查配置允许的聊天范围"
+          },
+          {
+            "name": "ensure_platform_allowed",
+            "file": "context_lookup.py",
+            "description": "检查平台黑白名单"
+          },
+          {
+            "name": "ensure_group_allowed",
+            "file": "context_lookup.py",
+            "description": "检查群黑白名单"
+          },
+          {
+            "name": "ensure_user_allowed",
+            "file": "context_lookup.py",
+            "description": "检查用户黑白名单，支持多身份值匹配"
+          },
+          {
+            "name": "redact_person_id",
+            "file": "context_lookup.py",
+            "description": "按隐私配置隐藏 person_id"
+          },
+          {
+            "name": "redact_message_id",
+            "file": "context_lookup.py",
+            "description": "按隐私配置隐藏 message_id"
+          },
+          {
+            "name": "redact_stream_id",
+            "file": "context_lookup.py",
+            "description": "按隐私配置隐藏 stream_id"
+          },
+          {
+            "name": "stream_to_dict",
+            "file": "context_lookup.py",
+            "description": "将 ChatStreams 记录转为安全字典，包含脱敏处理"
+          },
+          {
+            "name": "message_to_dict",
+            "file": "context_lookup.py",
+            "description": "将 Messages 记录转为模型友好的上下文字典，标注 sender_role（bot/target_user/other）"
+          },
+          {
+            "name": "build_timeline",
+            "file": "context_lookup.py",
+            "description": "生成紧凑时间线文本，便于 LLM 理解"
+          },
+          {
+            "name": "resolve_user",
+            "file": "context_lookup.py",
+            "description": "解析目标用户：通过 platform+user_id 或 user_hint 解析，检查黑白名单，返回 resolved_user_id/person_id/person_info"
+          },
+          {
+            "name": "find_user_streams",
+            "file": "context_lookup.py",
+            "description": "查找与目标用户相关的私聊/群聊流，支持按 chat_scope 过滤和群黑白名单校验"
+          },
+          {
+            "name": "get_messages_for_stream",
+            "file": "context_lookup.py",
+            "description": "从指定聊天流抓取消息，支持 around_user 模式（围绕用户发言截取上下文）"
+          },
+          {
+            "name": "lookup_user_memory",
+            "file": "context_lookup.py",
+            "description": "检索用户长期记忆，依赖 BookuMemoryService，支持 person/related/query 三类搜索任务"
+          },
+          {
+            "name": "lookup_user_context",
+            "file": "context_lookup.py",
+            "description": "抓取用户相关聊天流上下文，主入口函数，被 SendToUserContextTool 调用"
+          }
+        ],
+        "dependencies": [
+          "src.core.models.sql_alchemy (ChatStreams, Messages)",
+          "src.core.utils.user_query_helper (get_user_query_helper)",
+          "src.kernel.db (QueryBuilder)",
+          "src.kernel.logger (get_logger)",
+          ".config (SendToConfig)",
+          "plugins.booku_memory.service (BookuMemoryService, 可选依赖)"
+        ],
+        "patterns": [
+          "防御式编程：所有输入参数均经过 normalize/clamp 处理，异常时返回安全默认值",
+          "黑白名单策略模式：平台、群、用户三层黑白名单独立校验",
+          "隐私脱敏模式：person_id/message_id/stream_id 根据配置选择性暴露",
+          "角色标注模式：消息发送者被标注为 bot/target_user/other，便于 LLM 理解上下文关系",
+          "around_user 上下文截取：围绕目标用户最近发言，前后各取一半消息，形成连贯上下文",
+          "多任务记忆检索：person（用户个人记忆）→ related（关联记忆）→ query（知识类记忆）的优先级搜索链"
+        ],
+        "public_api": [
+          "lookup_user_context",
+          "lookup_user_memory",
+          "resolve_user",
+          "find_user_streams",
+          "get_messages_for_stream"
+        ],
+        "summary": "context_lookup.py 是 send_to 插件的核心查询模块，负责按用户检索跨聊天流的近期上下文和长期记忆。模块设计遵循严格的隐私控制原则，支持平台/群/用户三层黑白名单，所有敏感 ID 均可配置脱敏。lookup_user_context 函数通过 resolve_user → find_user_streams → get_messages_for_stream 的流水线，从私聊和群聊中抓取目标用户相关的消息，并将消息发送者标注为 bot/target_user/other 三种角色，便于 LLM 理解对话关系。lookup_user_memory 则通过可选依赖的 BookuMemoryService，执行 person/related/query 三类记忆检索，实现用户长期记忆的跨流查询。两个主函数分别被 SendToUserContextTool 和 SendToUserMemoryTool 封装为 LLM 可调用的工具。"
+      },
+      "success": true
+    },
+    {
+      "path": "privacy.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "relay.py",
+      "report": "",
+      "success": true
+    },
+    {
+      "path": "commands.py",
+      "report": {
+        "module_path": "commands.py",
+        "purpose": "send_to插件的命令组件，提供两个主要调试命令：1) 手动强制生成当前群当日短期记忆（send_to_memory）；2) send_to跨流转告调试命令（send_to_relay）。这两个命令均仅限插件主人(OWNER)使用。",
+        "key_classes": [
+          {
+            "name": "SendToMemoryCommand",
+            "file": "commands.py",
+            "description": "手动强制生成当前群当日短期记忆的命令类。支持中英文命令别名（send_to_memory / 短期记忆 / short_memory），以及子命令now/立即。调用daily_memory.force_generate_today()全量重做当天的短期记忆。"
+          },
+          {
+            "name": "SendToRelayDebugCommand",
+            "file": "commands.py",
+            "description": "send_to跨流转告调试命令类。默认关闭（占位性质），提供状态查看和清理等调试子命令。正式的跨流转告由LLM调用send_to_relay_intent Action完成。"
+          }
+        ],
+        "key_functions": [
+          {
+            "name": "SendToMemoryCommand.match",
+            "file": "commands.py",
+            "description": "匹配命令别名，支持send_to_memory、短期记忆、short_memory三种触发方式"
+          },
+          {
+            "name": "SendToMemoryCommand._do_force_generate",
+            "file": "commands.py",
+            "description": "核心执行逻辑：检查群聊类型→调用force_generate_today→格式化并回复生成的短期记忆摘要"
+          },
+          {
+            "name": "force_generate_today",
+            "file": "daily_memory.py",
+            "description": "手动触发：立即对指定stream全量重做今天的短期记忆并覆盖。忽略水位线，从当日0点重新读取所有消息。返回新生成的DailyMemoryRecord或None。"
+          },
+          {
+            "name": "_generate_full_day_summary",
+            "file": "daily_memory.py",
+            "description": "对指定日期生成短期记忆的核心函数。支持增量更新（默认）和全量重做（force_full=True）两种模式。使用actor模型任务，通过LLM生成第一人称视角的当日回忆。"
+          },
+          {
+            "name": "relay_intent",
+            "file": "relay.py",
+            "description": "把跨流转告意图注入目标流并启动目标流。构建虚拟消息，包含来源流上下文和转告内容，通过target.context.add_unread_message注入。"
+          }
+        ],
+        "dependencies": [
+          "src.app.plugin_system.api.send_api",
+          "src.app.plugin_system.base",
+          "src.app.plugin_system.types",
+          "src.kernel.logger",
+          ".daily_memory (force_generate_today)"
+        ],
+        "patterns": [
+          "命令路由模式：使用@cmd_route()装饰器注册子命令处理函数",
+          "权限控制模式：PermissionLevel.OWNER限制仅主人可用",
+          "异步锁模式：daily_memory中使用asyncio.Lock按stream_id粒度加锁防止并发冲突",
+          "增量/全量双模式：_generate_full_day_summary支持增量更新和全量重做两种策略",
+          "水位线模式：last_summarized_ts作为增量更新的时间戳水位线",
+          "虚拟消息注入：relay通过构建虚拟Message对象注入目标流的context"
+        ],
+        "public_api": [
+          "SendToMemoryCommand",
+          "SendToRelayDebugCommand",
+          "force_generate_today",
+          "relay_intent"
+        ],
+        "summary": "commands.py是send_to插件的命令入口模块，实现了两个OWNER级别的调试命令。SendToMemoryCommand允许主人手动触发当日短期记忆的全量重新生成，该命令通过调用daily_memory.force_generate_today()实现，底层使用_generate_full_day_summary函数，支持增量更新和全量重做两种模式。短期记忆采用actor模型，以第一人称视角生成当日群聊的主观回忆，包含人设注入、时序脉络、关键人物和决议等要素，并通过last_summarized_ts水位线机制实现增量融合。\n\nSendToRelayDebugCommand是跨流转告的调试命令，当前为占位实现，默认关闭。正式的跨流转告由LLM调用relay_intent Action完成，该功能在relay.py中实现，通过构建虚拟Message对象注入目标流的未读消息队列并启动目标流循环。两个命令类均继承自BaseCommand，使用@cmd_route装饰器进行子命令路由，权限级别为OWNER。"
+      },
+      "success": true
+    },
+    {
+      "path": "wander.py",
+      "report": "Connection error.",
+      "success": false
+    }
+  ],
+  "virtual_environment": "未检测到"
+}

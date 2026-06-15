@@ -28,6 +28,9 @@ ACTOR_REMINDER_NAME = "跨聊天流上下文摘要"
 
 _stream_locks: dict[str, asyncio.Lock] = {}
 
+# Lock 字典清理阈值
+_LOCK_CLEANUP_THRESHOLD = 256
+
 
 @dataclass(slots=True)
 class StreamSummaryRecord:
@@ -77,10 +80,15 @@ def _pending_key(stream_id: str) -> str:
 
 
 def _get_stream_lock(stream_id: str) -> asyncio.Lock:
-    """按聊天流获取异步锁，避免并发重复摘要。"""
+    """按聊天流获取异步锁，避免并发重复摘要；超阈值时清理未被持有的锁。"""
 
     lock = _stream_locks.get(stream_id)
     if lock is None:
+        # 简单清理：防止无界增长
+        if len(_stream_locks) > _LOCK_CLEANUP_THRESHOLD:
+            stale_keys = [k for k, v in _stream_locks.items() if not v.locked()]
+            for k in stale_keys:
+                del _stream_locks[k]
         lock = asyncio.Lock()
         _stream_locks[stream_id] = lock
     return lock
@@ -191,6 +199,8 @@ def _message_to_pending_record(message: "Message", direction: str) -> PendingMes
     """将 Message 转为待处理的轻量快照。"""
 
     text = message.processed_plain_text or str(message.content or "")
+    if not text.strip():
+        return None
     normalized_text = _trim_text(text, 800)
     return PendingMessageRecord(
         message_id=str(message.message_id or ""),
@@ -301,7 +311,6 @@ async def _generate_updated_summary(
     )
 
     response = await request.send(stream=False)
-    await response
     summary_text = str(response.message or "").strip()
     if not summary_text:
         raise ValueError("自动摘要生成了空结果")

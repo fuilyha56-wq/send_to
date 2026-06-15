@@ -41,7 +41,7 @@ class SendToPlugin(BasePlugin):
 
     plugin_name: str = "send_to"
     plugin_description: str = "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入"
-    plugin_version: str = "3.0.0"
+    plugin_version: str = "3.0.3-alpha"
 
     configs: list[type] = [SendToConfig]
     dependent_components: list[str] = []

@@ -209,7 +209,11 @@ def _resolve_effective_person_id(
     recent_messages: list[Any],
     trigger_sender_id: str = "",
 ) -> str:
-    """解析本轮跨流注入的目标用户，群聊优先使用触发消息用户。"""
+    """解析本轮跨流注入的目标用户，群聊优先使用触发消息用户。
+
+    群聊中如果无法从 values/recent_msgs 解析出触发用户 person_id，
+    返回空串而非 stream_person_id，避免用群聊占位值做跨流查询。
+    """
     stream_person_id = _normalize_text(getattr(current_stream, "person_id", ""))
     trigger_person_id = _extract_trigger_person_id(values)
     if chat_type == "group":
@@ -220,7 +224,8 @@ def _resolve_effective_person_id(
             bot_id=str(getattr(current_stream, "bot_id", "") or ""),
             trigger_sender_id=trigger_sender_id,
         )
-        return resolved_person_id or stream_person_id
+        # 群聊不回退到 stream_person_id（可能是占位值），返回空串让调用方跳过注入
+        return resolved_person_id
     return trigger_person_id or stream_person_id
 
 

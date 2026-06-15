@@ -6,12 +6,15 @@ Neo-MoFox 跨聊天流能力插件。
 
 ## 本次更新摘要
 
-- 插件版本更新到 `3.0.0`。
-- 合并 `context_bridge_tool`：用户长期记忆查询、用户跨流上下文查询、自动 prompt 注入。
-- 合并 `cross_stream_relay`：跨流摘要、每日短期记忆、目标流查找、原始上下文查询、relay 转告。
-- 自动注入现在同时包含：跨流摘要索引 + 当前触发用户在其他流的近期上下文。
-- 旧插件能力统一改为 `send_to_*` 命名。
-- 高风险或实验功能默认关闭：跨流执行、relay 转告、自动串门、relay 调试命令。
+- 插件版本更新到 `3.0.3-alpha`。
+- **[严重修复]** `wander.py` 导入路径统一为 `src.app.plugin_system`，与项目其他 EventHandler 一致。
+- **[中等修复]** `stream_index.py` / `daily_memory.py` 移除 LLM response 冗余 `await`，避免潜在运行时异常。
+- **[中等修复]** `daily_memory.py` 跨天归档后 `last_summary_at` 改为当前时间，确保 idle 触发在新一天正常工作。
+- **[中等修复]** `context_lookup.py` scope 降级逻辑改为按请求 scope 相关性降级（请求 group 优先降级到 all 而非 private）。
+- **[中等修复]** `auto_inject.py` 群聊中无法解析 person_id 时返回空串，不再回退到 stream 级占位值。
+- **[中等修复]** `action.py` 去重逻辑改为保留首次出现，避免同一 gid 不同 gname 时丢失信息。
+- **[低修复]** `action.py` SendToExecuteAction 不再重复调用 `_resolve_group_id`，从已解析的 stream info 获取 group_id。
+- **[低修复]** `stream_index.py` / `daily_memory.py` Lock 字典超阈值时清理未被持有的锁，防止无界增长。
 
 ## 功能概览
 

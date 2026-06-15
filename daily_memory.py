@@ -44,6 +44,9 @@ logger = get_logger("send_to.daily_memory")
 
 _state_locks: dict[str, asyncio.Lock] = {}
 
+# Lock 字典清理阈值
+_LOCK_CLEANUP_THRESHOLD = 256
+
 
 @dataclass(slots=True)
 class DailyMemoryRecord:
@@ -89,10 +92,15 @@ def _memory_key(stream_id: str, memory_date: str) -> str:
 
 
 def _state_lock(stream_id: str) -> asyncio.Lock:
-    """按 stream_id 取得异步锁。"""
+    """按 stream_id 取得异步锁；超阈值时清理未被持有的锁。"""
 
     lock = _state_locks.get(stream_id)
     if lock is None:
+        # 简单清理：防止无界增长
+        if len(_state_locks) > _LOCK_CLEANUP_THRESHOLD:
+            stale_keys = [k for k, v in _state_locks.items() if not v.locked()]
+            for k in stale_keys:
+                del _state_locks[k]
         lock = asyncio.Lock()
         _state_locks[stream_id] = lock
     return lock
@@ -462,7 +470,6 @@ async def _generate_full_day_summary(
     request.add_payload(LLMPayload(ROLE.USER, Text(user_text)))
 
     response = await request.send(stream=False)
-    await response
     summary_text = str(response.message or "").strip()
     if not summary_text:
         logger.warning(
@@ -575,7 +582,7 @@ async def register_bot_message(plugin: Any, message: Message) -> None:
                 )
             state.current_date = today
             state.round_count = 0
-            state.last_summary_at = 0.0
+            state.last_summary_at = time.time()  # 设为当前时间，使 idle 触发在新一天也能正常工作
             state.last_event_direction = ""
 
         # ── 计算"轮次"：仅当 inbound→outbound 切换时 +1 ──
@@ -693,7 +700,7 @@ async def archive_yesterday_for_all(plugin: Any) -> None:
                 )
             fresh.current_date = today
             fresh.round_count = 0
-            fresh.last_summary_at = 0.0
+            fresh.last_summary_at = time.time()  # 设为当前时间，使 idle 触发在新一天也能正常工作
             fresh.last_event_direction = ""
             await _save_state(plugin, fresh)
 

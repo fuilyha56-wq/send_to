@@ -24,11 +24,11 @@ import json_repair
 from src.app.plugin_system.api import llm_api, stream_api
 from src.app.plugin_system.api.send_api import send_text
 from src.app.plugin_system.types import EventType
-from src.core.components.base.event_handler import BaseEventHandler
+from src.app.plugin_system.base import BaseEventHandler
 from src.core.models.sql_alchemy import ChatStreams, PersonInfo
 from src.kernel.db import QueryBuilder
 from src.kernel.event import EventDecision
-from src.kernel.llm import ROLE, LLMPayload, Text
+from src.app.plugin_system.types import ROLE, LLMPayload, Text
 from src.kernel.logger import get_logger
 
 if TYPE_CHECKING:

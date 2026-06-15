@@ -41,7 +41,7 @@ class SendToConfig(BaseConfig):
         """插件主配置。"""
 
         enabled: bool = Field(default=True, description="是否启用 send_to 插件")
-        version: str = Field(default="3.0.0", description="插件版本", disabled=True)
+        version: str = Field(default="3.0.2", description="插件版本", disabled=True)
 
     @config_section("dispatch", title="跨流发送", tag="plugin")
     class DispatchSection(SectionBase):

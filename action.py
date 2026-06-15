@@ -65,14 +65,25 @@ async def _resolve_group_id(platform: str, hint: str) -> tuple[str | None, str]:
         if gname and normalized_lower in gname.lower():
             partial.append((gid, gname))
 
-    unique_exact = list({gid: gname for gid, gname in exact}.items())
+    # 去重：同一 gid 保留首次出现的 gname，避免 dict 去重丢失信息
+    seen_gids: set[str] = set()
+    unique_exact: list[tuple[str, str]] = []
+    for gid, gname in exact:
+        if gid not in seen_gids:
+            seen_gids.add(gid)
+            unique_exact.append((gid, gname))
     if len(unique_exact) == 1:
         return unique_exact[0][0], ""
     if len(unique_exact) > 1:
         names = "、".join(f"{n}({g})" for g, n in unique_exact[:5])
         return None, f"group_hint='{hint}' 精确命中多个群：{names}，请用 group_id 指定"
 
-    unique_partial = list({gid: gname for gid, gname in partial}.items())
+    seen_gids.clear()
+    unique_partial: list[tuple[str, str]] = []
+    for gid, gname in partial:
+        if gid not in seen_gids:
+            seen_gids.add(gid)
+            unique_partial.append((gid, gname))
     if len(unique_partial) == 1:
         return unique_partial[0][0], ""
     if len(unique_partial) > 1:
@@ -216,6 +227,7 @@ class SendToAction(BaseAction):
         "target_type='private' 时提供 user_id 或 user_hint（昵称/群名片）。"
         "hint 类参数会做精确/模糊匹配，多命中时会返回歧义提示，请向用户确认后换用 ID 或更精确的名称。"
     )
+    associated_types: list[str] = ["text"]
     primary_action: bool = False
 
     async def execute(
@@ -338,6 +350,7 @@ class SendToExecuteAction(BaseAction):
         "例如要触发 nai_artist:action:draw，signature='nai_artist:action:draw'，"
         "params={\"prompt\": \"猫娘\", \"style\": \"anime\"}"
     )
+    associated_types: list[str] = ["text"]
     primary_action: bool = False
 
     async def execute(
@@ -443,11 +456,9 @@ class SendToExecuteAction(BaseAction):
         target_info = await _get_stream_info(target_stream_id)
         if normalized_type == "group":
             resolved_group_id = str(group_id or "").strip()
-            if not resolved_group_id:
-                resolved_group_id, _ = await _resolve_group_id(
-                    effective_platform,
-                    group_hint,
-                )
+            if not resolved_group_id and target_info:
+                # 从已解析的 stream info 中获取 group_id，避免重复调用 _resolve_group_id
+                resolved_group_id = str(target_info.get("group_id", "") or "")
             if resolved_group_id:
                 extra["target_group_id"] = resolved_group_id
         elif target_info and target_info.get("person_id"):
@@ -527,6 +538,7 @@ class SendToSummaryUpdateAction(BaseAction):
         "仅当当前摘要明显失真、遗漏关键事实或需要立刻记录跨流约定时调用。"
         "输入必须是客观、完整、覆盖旧摘要的新摘要。"
     )
+    associated_types: list[str] = ["text"]
     chatter_allow: list[str] = []
 
     async def execute(
@@ -556,6 +568,7 @@ class SendToRelayIntentAction(BaseAction):
         "此 Action 会把开场白、来源上下文和内部提示注入目标流，由目标流的 bot 自然续接。"
         "调用前建议先用 send_to_find_stream 获取 target_stream_id / target_user_id / target_group_id。"
     )
+    associated_types: list[str] = ["text"]
     chatter_allow: list[str] = []
 
     async def execute(

@@ -53,22 +53,26 @@ def normalize_list(values: list[str]) -> set[str]:
 
 
 def normalize_chat_scope(chat_scope: str, config: SendToConfig) -> str:
-    """规范化聊天范围。"""
+    """规范化聊天范围，按与请求 scope 的相关性降级。"""
 
     normalized = str(chat_scope or _ALL).strip().lower()
     if normalized not in {_PRIVATE, _GROUP, _ALL}:
         normalized = _ALL
 
     allowed = normalize_list(config.privacy.allowed_chat_scopes)
-    if allowed and normalized not in allowed:
-        if _ALL in allowed:
-            return _ALL
-        if _PRIVATE in allowed:
-            return _PRIVATE
-        if _GROUP in allowed:
-            return _GROUP
-        return ""
-    return normalized
+    if not allowed or normalized in allowed:
+        return normalized
+
+    # 按与请求 scope 的相关性降级：all 包含 group/private，group/private 互为远端
+    fallback_order: dict[str, list[str]] = {
+        _ALL: [_ALL, _PRIVATE, _GROUP],
+        _PRIVATE: [_ALL, _PRIVATE, _GROUP],
+        _GROUP: [_ALL, _GROUP, _PRIVATE],
+    }
+    for candidate in fallback_order.get(normalized, [_ALL, _PRIVATE, _GROUP]):
+        if candidate in allowed:
+            return candidate
+    return ""
 
 
 def format_time(value: Any) -> str:
