@@ -96,6 +96,11 @@ async def _resolve_group_id(platform: str, hint: str) -> tuple[str | None, str]:
 async def _resolve_user_id(platform: str, hint: str) -> tuple[str | None, str]:
     helper = get_user_query_helper()
     normalized_hint = str(hint or "").strip()
+
+    # 纯数字视为直接 user_id（QQ 号等），与 _resolve_group_id 行为一致
+    if normalized_hint.isdigit():
+        return normalized_hint, ""
+
     resolved = await helper.resolve_user_id(platform, normalized_hint)
     if resolved:
         return resolved, ""
@@ -125,7 +130,11 @@ async def _lookup_user_candidates(
     if not normalized_keyword:
         return []
 
-    rows = await QueryBuilder(PersonInfo).filter(platform=platform).all()
+    rows = await (
+        QueryBuilder(PersonInfo).filter(platform=platform).all()
+        if platform
+        else QueryBuilder(PersonInfo).all()
+    )
     persons = cast(list[PersonInfo], rows)
     keyword_lower = normalized_keyword.lower()
     exact: list[dict[str, Any]] = []
@@ -148,12 +157,16 @@ async def _lookup_user_candidates(
             "interaction_count": getattr(person, "interaction_count", None),
         }
 
+        uid_lower = uid.lower()
         nickname_lower = nickname.lower()
         cardname_lower = cardname.lower()
-        if nickname_lower == keyword_lower or cardname_lower == keyword_lower:
+
+        # 精确匹配：user_id / 昵称 / 群名片
+        if uid_lower == keyword_lower or nickname_lower == keyword_lower or cardname_lower == keyword_lower:
             exact.append(record)
             continue
-        if keyword_lower in nickname_lower or keyword_lower in cardname_lower:
+        # 模糊匹配：user_id / 昵称 / 群名片
+        if keyword_lower in uid_lower or keyword_lower in nickname_lower or keyword_lower in cardname_lower:
             partial.append(record)
 
         if len(exact) + len(partial) >= limit * 3:
@@ -170,13 +183,13 @@ async def _resolve_stream_id(
     user_id: str,
     user_hint: str,
     current_stream_id: str,
-) -> tuple[str | None, str]:
+) -> tuple[str | None, str, str]:
     if target_type == "group":
         normalized_group_id = str(group_id or "").strip()
         normalized_group_hint = str(group_hint or "").strip()
 
         if not normalized_group_id and not normalized_group_hint:
-            return None, "发送到群聊必须提供 group_id 或 group_hint"
+            return None, "发送到群聊必须提供 group_id 或 group_hint", ""
 
         if not normalized_group_id:
             resolved_gid, reason = await _resolve_group_id(
@@ -185,34 +198,34 @@ async def _resolve_stream_id(
             if not resolved_gid:
                 return None, (
                     f"{reason}。可以调用 send_to_list_groups 查看可用群列表后再决定。"
-                )
+                ), ""
             normalized_group_id = resolved_gid
 
         target_stream_id = ChatStream.generate_stream_id(
             effective_platform, group_id=normalized_group_id
         )
         if target_stream_id == current_stream_id:
-            return None, "目标就是当前会话，请直接回复而非使用 send_to"
-        return target_stream_id, ""
+            return None, "目标就是当前会话，请直接回复而非使用 send_to", ""
+        return target_stream_id, "", normalized_group_id
 
     normalized_user_id = str(user_id or "").strip()
     normalized_hint = str(user_hint or "").strip()
 
     if not normalized_user_id and not normalized_hint:
-        return None, "发送到私聊必须提供 user_id 或 user_hint"
+        return None, "发送到私聊必须提供 user_id 或 user_hint", ""
 
     if not normalized_user_id:
         resolved_uid, reason = await _resolve_user_id(effective_platform, normalized_hint)
         if not resolved_uid:
-            return None, reason
+            return None, reason, ""
         normalized_user_id = resolved_uid
 
     target_stream_id = ChatStream.generate_stream_id(
         effective_platform, user_id=normalized_user_id
     )
     if target_stream_id == current_stream_id:
-        return None, "目标就是当前会话，请直接回复而非使用 send_to"
-    return target_stream_id, ""
+        return None, "目标就是当前会话，请直接回复而非使用 send_to", ""
+    return target_stream_id, "", normalized_user_id
 
 
 class SendToAction(BaseAction):
@@ -273,7 +286,7 @@ class SendToAction(BaseAction):
             yield False, "无法确定目标平台"
             return
 
-        target_stream_id, err = await _resolve_stream_id(
+        target_stream_id, err, resolved_id = await _resolve_stream_id(
             normalized_type,
             effective_platform,
             group_id,
@@ -285,6 +298,26 @@ class SendToAction(BaseAction):
         if err:
             yield False, err
             return
+
+        # 确保流记录存在（支持向无聊天记录的用户发送）
+        try:
+            from src.app.plugin_system.api import stream_api
+            if normalized_type == "group":
+                await stream_api.get_or_create_stream(
+                    stream_id=target_stream_id,
+                    platform=effective_platform,
+                    group_id=resolved_id,
+                    chat_type="group",
+                )
+            else:
+                await stream_api.get_or_create_stream(
+                    stream_id=target_stream_id,
+                    platform=effective_platform,
+                    user_id=resolved_id,
+                    chat_type="private",
+                )
+        except Exception:
+            pass  # 非致命：send_text 可能仍能工作
 
         target_desc = f"{'群' if normalized_type == 'group' else '用户'} {target_stream_id[:20] if target_stream_id else '?'}"
 
@@ -439,7 +472,7 @@ class SendToExecuteAction(BaseAction):
             yield False, "无法确定目标平台"
             return
 
-        target_stream_id, err = await _resolve_stream_id(
+        target_stream_id, err, resolved_id = await _resolve_stream_id(
             normalized_type,
             effective_platform,
             group_id,
@@ -451,6 +484,26 @@ class SendToExecuteAction(BaseAction):
         if err:
             yield False, err
             return
+
+        # 确保流记录存在（支持向无聊天记录的用户发送）
+        try:
+            from src.app.plugin_system.api import stream_api
+            if normalized_type == "group":
+                await stream_api.get_or_create_stream(
+                    stream_id=target_stream_id,
+                    platform=effective_platform,
+                    group_id=resolved_id,
+                    chat_type="group",
+                )
+            else:
+                await stream_api.get_or_create_stream(
+                    stream_id=target_stream_id,
+                    platform=effective_platform,
+                    user_id=resolved_id,
+                    chat_type="private",
+                )
+        except Exception:
+            pass  # 非致命：execute_action 可能仍能工作
 
         extra: dict[str, Any] = {}
         target_info = await _get_stream_info(target_stream_id)

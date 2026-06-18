@@ -122,8 +122,9 @@ def _yesterday_str_of(d: str) -> str:
 def _get_config(plugin: Any) -> SendToConfig:
     """获取插件配置，缺失时返回默认配置。"""
 
-    if isinstance(plugin.config, SendToConfig):
-        return plugin.config
+    config = getattr(plugin, "config", None)
+    if isinstance(config, SendToConfig):
+        return config
     return SendToConfig()
 
 

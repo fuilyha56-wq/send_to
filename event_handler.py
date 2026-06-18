@@ -54,12 +54,6 @@ class SendToAutoSummaryHandler(BaseEventHandler):
             try:
                 if direction == "outbound":
                     await register_bot_message(self.plugin, message)
-                    if config.index.inject_summary_reminder:
-                        await sync_actor_reminder(
-                            self.plugin,
-                            current_chat_type=message.chat_type,
-                            current_stream_id=str(message.stream_id or ""),
-                        )
                 else:
                     await register_inbound_message(self.plugin, message)
             except Exception as error:

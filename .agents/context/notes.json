@@ -1,0 +1,8 @@
+[
+  {
+    "content": "分析 send_to 插件当前代码状态：\n- _resolve_stream_id 已返回三元组 (stream_id, err, resolved_id) ✓\n- SendToAction 和 SendToExecuteAction 已调用 get_or_create_stream() ✓\n- SendToFindStreamTool 已有纯数字标识符回退路径 ✓\n- B1/B2 _get_config 已使用 getattr 保护 ✓\n- B3/B4/B5 索引阈值已改为 <=3 ✓\n- 需确认：\"创建临时消息\"功能是什么？当前代码中未找到相关实现",
+    "tag": "analysis",
+    "timestamp": "2026-06-18 03:34:28",
+    "id": 1
+  }
+]

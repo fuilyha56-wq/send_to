@@ -139,6 +139,7 @@ class SendToStreamContextTool(BaseTool):
             return False, "消息数量必须大于 0"
         if message_count > 200:
             return False, "单次最多获取 200 条消息"
+        msg_count = _clamp(message_count, lo=1, hi=200)
         ident = str(stream_identifier or "").strip()
         if not ident:
             return False, "stream_identifier 不能为空"
@@ -147,7 +148,7 @@ class SendToStreamContextTool(BaseTool):
             return False, "当前没有任何聊天流记录"
 
         target_record = None
-        if ident.isdigit() and len(ident) <= 4:
+        if ident.isdigit() and len(ident) <= 3:
             index = int(ident) - 1
             if 0 <= index < len(records):
                 target_record = records[index]
@@ -164,7 +165,7 @@ class SendToStreamContextTool(BaseTool):
                 return False, "\n".join(lines)
             target_record = matched[0]
 
-        messages = await message_api.get_recent_messages(stream_id=target_record.stream_id, hours=24 * 365, limit=message_count, limit_mode="latest", filter_bot=False)
+        messages = await message_api.get_recent_messages(stream_id=target_record.stream_id, hours=24 * 365, limit=msg_count, limit_mode="latest", filter_bot=False)
         lines = [f"聊天流: {_build_stream_title(target_record)}", f"平台: {target_record.platform or 'unknown'}", f"类型: {target_record.chat_type or 'unknown'}", f"Stream ID: {target_record.stream_id}", "", f"最近 {len(messages)} 条原始聊天记录:", ""]
         if messages:
             lines.append(await message_api.build_readable_messages_to_str(messages=messages, replace_bot_name=False, merge_messages=False, timestamp_mode="absolute", truncate=False))
@@ -195,7 +196,7 @@ class SendToDailyMemoryTool(BaseTool):
             return False, "请提供有效的群标识符"
         records = await list_summary_records(self.plugin)
         target: StreamSummaryRecord | None = None
-        if ident.isdigit() and len(ident) <= 4:
+        if ident.isdigit() and len(ident) <= 3:
             idx = int(ident) - 1
             if 0 <= idx < len(records):
                 target = records[idx]
@@ -261,12 +262,53 @@ class SendToFindStreamTool(BaseTool):
                 info = await stream_api.get_stream_info(ident)
                 if isinstance(info, dict):
                     return True, "\n".join(["找到目标流（来自 StreamManager 但暂无摘要）：", f"target_stream_id: \"{ident}\"", f"target_platform: \"{info.get('platform') or ''}\"", f"chat_type: {info.get('chat_type') or 'unknown'}", f"target_group_id: \"{info.get('group_id') or ''}\"", "summary: (暂无摘要)"])
-        elif ident.isdigit() and len(ident) <= 4:
+        elif ident.isdigit() and len(ident) <= 3:
             idx = int(ident) - 1
             if 0 <= idx < len(candidates):
                 target = candidates[idx]
         elif ident.isdigit():
             target = next((r for r in candidates if r.target_id and str(r.target_id) == ident), None)
+            # 纯数字标识符在摘要记录中找不到时，尝试按 QQ 号/群号直接生成流
+            if target is None:
+                from src.core.models.stream import ChatStream
+                results: list[tuple[str, str, str]] = []  # (stream_id, chat_type, target_id)
+                types_to_try = [hint] if hint else ["private", "group"]
+                for try_type in types_to_try:
+                    if try_type == "group":
+                        sid = ChatStream.generate_stream_id("qq", group_id=ident)
+                    else:
+                        sid = ChatStream.generate_stream_id("qq", user_id=ident)
+                    results.append((sid, try_type, ident))
+                # 若有 chat_type_hint 则只返回一种；否则两种都尝试
+                if len(results) == 1:
+                    sid, ctype, tid = results[0]
+                    try:
+                        kwargs: dict[str, Any] = {
+                            "stream_id": sid,
+                            "platform": "qq",
+                            "chat_type": ctype,
+                        }
+                        if ctype == "group":
+                            kwargs["group_id"] = tid
+                        else:
+                            kwargs["user_id"] = tid
+                        await stream_api.get_or_create_stream(**kwargs)
+                    except Exception:
+                        pass
+                    return True, "\n".join([
+                        "找到目标流（按 ID 直接生成，暂无摘要）：",
+                        f"target_stream_id: \"{sid}\"",
+                        f"target_platform: \"qq\"",
+                        f"chat_type: {ctype}",
+                        f"target_{'group' if ctype == 'group' else 'user'}_id: \"{tid}\"",
+                        "summary: (暂无摘要)",
+                    ])
+                # 无 hint 时两种都可能，返回歧义提示
+                return False, "\n".join([
+                    f"数字标识 '{ident}' 可能是群号也可能是 QQ 号，请通过 chat_type_hint 消歧：",
+                    f"- 若为群号：chat_type_hint='group' → stream_id=\"{results[1][0]}\"",
+                    f"- 若为 QQ 号：chat_type_hint='private' → stream_id=\"{results[0][0]}\"",
+                ])
         else:
             matched = [r for r in candidates if ident.lower() in _build_stream_title(r).lower()]
             if len(matched) == 1:

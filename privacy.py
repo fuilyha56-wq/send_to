@@ -23,14 +23,11 @@ if TYPE_CHECKING:
 
 def _normalize_id(value: str | int) -> str:
     """将 QQ 号统一转换为字符串进行比较。"""
+
     return str(value).strip()
 
 
-def _check_list(
-    target_id: str,
-    list_type: str,
-    id_list: list[str | int],
-) -> bool:
+def _check_list(target_id: str, list_type: str, id_list: list[str | int]) -> bool:
     """根据黑白名单模式判断目标 ID 是否允许通过。
 
     Args:
@@ -41,22 +38,18 @@ def _check_list(
     Returns:
         True 表示允许（不被过滤），False 表示拒绝（被过滤掉）
     """
+
     normalized_list = {_normalize_id(v) for v in id_list}
     target = _normalize_id(target_id)
 
     if list_type == "whitelist":
-        # 白名单：不在列表里则拒绝
+        # 白名单模式：仅列表内 ID 通过
         return target in normalized_list
-    else:
-        # 黑名单（默认）：在列表里则拒绝
-        return target not in normalized_list
+    # 黑名单模式：列表内 ID 被拒绝
+    return target not in normalized_list
 
 
-def should_collect_message(
-    config: "SendToConfig",
-    chat_type: str,
-    target_id: str,
-) -> bool:
+def should_collect_message(config: SendToConfig, chat_type: str, target_id: str) -> bool:
     """判断该聊天流的消息是否应被收集进摘要缓冲。
 
     Args:
@@ -67,6 +60,7 @@ def should_collect_message(
     Returns:
         True 表示允许收集，False 表示跳过
     """
+
     priv = config.privacy
 
     if chat_type == "group":
@@ -78,17 +72,15 @@ def should_collect_message(
         mode = priv.private_bridge_mode
         if mode == "off":
             return False
-        # one_way / two_way 都正常收集
         if not target_id:
             return True
         return _check_list(target_id, priv.private_list_type, priv.private_list)
 
-    # discuss 或未知类型，默认允许
     return True
 
 
 def should_show_in_reminder(
-    config: "SendToConfig",
+    config: SendToConfig,
     record_chat_type: str,
     record_target_id: str,
     current_chat_type: str,
@@ -111,28 +103,26 @@ def should_show_in_reminder(
     Returns:
         True 表示该摘要应出现在 reminder 中
     """
+
     priv = config.privacy
 
-    # 先做黑白名单过滤（无论 mode 如何，不在允许范围的流摘要都不显示）
+    # 群聊摘要：检查群黑白名单
     if record_chat_type == "group":
         if record_target_id and not _check_list(
             record_target_id, priv.group_list_type, priv.group_list
         ):
             return False
-
+    # 私聊摘要：检查私聊互通模式 + 私聊黑白名单
     elif record_chat_type == "private":
         mode = priv.private_bridge_mode
         if mode == "off":
             return False
-
         if record_target_id and not _check_list(
             record_target_id, priv.private_list_type, priv.private_list
         ):
             return False
-
         if mode == "one_way":
-            # one_way：私聊摘要只能注入到私聊流自身的 reminder
-            # 当前上下文不是私聊时，不允许看到任何私聊摘要
+            # one_way 模式：私聊摘要仅在当前上下文也是私聊时可见
             if current_chat_type != "private":
                 return False
 

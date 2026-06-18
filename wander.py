@@ -310,7 +310,6 @@ async def _llm_decide(
         request.add_payload(LLMPayload(ROLE.USER, Text(user_prompt)))
 
         response = await request.send(stream=False)
-        await response
 
         content = (response.message or "").strip()
         if not content:

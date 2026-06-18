@@ -62,8 +62,9 @@ class PendingMessageRecord:
 def _get_config(plugin: Any) -> SendToConfig:
     """获取插件配置，缺失时返回默认配置。"""
 
-    if isinstance(plugin.config, SendToConfig):
-        return plugin.config
+    config = getattr(plugin, "config", None)
+    if isinstance(config, SendToConfig):
+        return config
     return SendToConfig()
 
 
@@ -101,7 +102,7 @@ def _trim_text(text: str, max_chars: int) -> str:
         line.strip() for line in text.replace("\r\n", "\n").split("\n") if line.strip()
     ).strip()
     if not normalized:
-        raise ValueError("summary 不能为空")
+        raise ValueError("文本不能为空")
 
     if max_chars <= 0 or len(normalized) <= max_chars:
         return normalized

@@ -248,6 +248,11 @@ async def resolve_user(
 
     helper = get_user_query_helper()
     resolved_user_id = normalized_user_id
+
+    # 若 user_hint 是纯数字（QQ 号等），直接作为 user_id
+    if not resolved_user_id and normalized_hint.isdigit():
+        resolved_user_id = normalized_hint
+
     if not resolved_user_id and normalized_hint:
         resolved_user_id = await helper.resolve_user_id(normalized_platform, normalized_hint) or ""
 
