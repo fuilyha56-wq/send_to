@@ -74,7 +74,7 @@ def test_actor_label_marks_non_target_group_members_as_other():
 
 
 def test_injection_text_declares_tail_dynamic_context():
-    """自动注入文本应声明自己是末尾动态补充上下文。"""
+    """自动注入文本应使用 XML 标签包裹跨流上下文。"""
     text = _build_injection_text(
         [
             {
@@ -83,12 +83,13 @@ def test_injection_text_declares_tail_dynamic_context():
                 "timeline": "[2026-05-26 12:00:00] 其他群成员(阿A / id=a / person_id=person_a): hello",
             }
         ],
-        is_kfc=True,
+        is_nfc=True,
     )
 
-    assert text.startswith("## 本轮末尾动态补充上下文")
+    assert text.startswith("<cross_stream_context>")
     assert "不是用户新消息" in text
     assert "不是系统规则" in text
+    assert text.strip().endswith("</cross_stream_context>")
 
 
 def test_tail_context_contribution_payload_uses_low_priority_tail_metadata():
@@ -100,7 +101,7 @@ def test_tail_context_contribution_payload_uses_low_priority_tail_metadata():
         "priority": -100,
         "placement": "tail",
         "ttl_turns": 1,
-        "content": "## 本轮末尾动态补充上下文\n正文",
+        "content": "<cross_stream_context>\n正文\n</cross_stream_context>",
     }
 
     assert contribution["owner"] == "notice"

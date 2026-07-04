@@ -36,6 +36,8 @@ from src.core.models.message import Message
 
 from .config import SendToConfig
 from .privacy import _check_list
+from .utils import get_config as _get_config
+from .utils import get_or_create_lock, trim_text as _trim_text
 
 if TYPE_CHECKING:
     pass
@@ -43,9 +45,6 @@ if TYPE_CHECKING:
 logger = get_logger("send_to.daily_memory")
 
 _state_locks: dict[str, asyncio.Lock] = {}
-
-# Lock 字典清理阈值
-_LOCK_CLEANUP_THRESHOLD = 256
 
 
 @dataclass(slots=True)
@@ -94,16 +93,7 @@ def _memory_key(stream_id: str, memory_date: str) -> str:
 def _state_lock(stream_id: str) -> asyncio.Lock:
     """按 stream_id 取得异步锁；超阈值时清理未被持有的锁。"""
 
-    lock = _state_locks.get(stream_id)
-    if lock is None:
-        # 简单清理：防止无界增长
-        if len(_state_locks) > _LOCK_CLEANUP_THRESHOLD:
-            stale_keys = [k for k, v in _state_locks.items() if not v.locked()]
-            for k in stale_keys:
-                del _state_locks[k]
-        lock = asyncio.Lock()
-        _state_locks[stream_id] = lock
-    return lock
+    return get_or_create_lock(_state_locks, stream_id)
 
 
 def _today_str() -> str:
@@ -117,15 +107,6 @@ def _yesterday_str_of(d: str) -> str:
 
     parsed = datetime.strptime(d, "%Y-%m-%d").date()
     return (parsed - timedelta(days=1)).isoformat()
-
-
-def _get_config(plugin: Any) -> SendToConfig:
-    """获取插件配置，缺失时返回默认配置。"""
-
-    config = getattr(plugin, "config", None)
-    if isinstance(config, SendToConfig):
-        return config
-    return SendToConfig()
 
 
 def _load_state(data: dict[str, Any] | None) -> DailyState | None:
@@ -172,21 +153,6 @@ def _load_record(data: dict[str, Any] | None) -> DailyMemoryRecord | None:
         updated_at=str(data.get("updated_at", "") or ""),
         last_summarized_ts=float(data.get("last_summarized_ts", 0.0) or 0.0),
     )
-
-
-def _trim_text(text: str, max_chars: int) -> str:
-    """归一化并按上限截断文本。"""
-
-    normalized = "\n".join(
-        line.strip() for line in text.replace("\r\n", "\n").split("\n") if line.strip()
-    ).strip()
-    if not normalized:
-        return ""
-    if max_chars <= 0 or len(normalized) <= max_chars:
-        return normalized
-    if max_chars <= 3:
-        return normalized[:max_chars]
-    return normalized[: max_chars - 3].rstrip() + "..."
 
 
 def _extract_group_meta(message: Message) -> tuple[str, str]:

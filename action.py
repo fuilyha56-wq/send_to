@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Annotated, Any, AsyncGenerator, cast
 
 from src.app.plugin_system.api.action_api import execute_action
-from src.app.plugin_system.api.send_api import send_text
 from src.app.plugin_system.base import BaseAction
 from src.app.plugin_system.types import Message, MessageType
 from src.core.models.sql_alchemy import ChatStreams, PersonInfo
@@ -299,37 +298,63 @@ class SendToAction(BaseAction):
             yield False, err
             return
 
-        # 确保流记录存在（支持向无聊天记录的用户发送）
-        try:
-            from src.app.plugin_system.api import stream_api
+        target_desc = f"{'群' if normalized_type == 'group' else '用户'} {target_stream_id[:20] if target_stream_id else '?'}"
+
+        yield None
+
+        # 构造消息并直接通过 MessageSender 发送（而非 send_text），
+        # 以便发送后将消息注入目标流的 unread_messages 并启动 stream_loop，
+        # 避免消息仅写入 history_messages 导致目标 bot 不响应。
+        from uuid import uuid4
+
+        from src.core.managers.stream_manager import get_stream_manager
+        from src.core.transport.distribution.stream_loop_manager import (
+            get_stream_loop_manager,
+        )
+        from src.core.transport.message_send import get_message_sender
+
+        message_id = f"send_to_{uuid4().hex}"
+        message = Message(
+            message_id=message_id,
+            content=text,
+            processed_plain_text=text,
+            message_type=MessageType.TEXT,
+            platform=effective_platform,
+            stream_id=target_stream_id,
+            chat_type=normalized_type,
+        )
+
+        sender = get_message_sender()
+        ok = await sender.send_message(message)
+
+        if ok:
+            # 确保目标流在内存中（send_message 内部的 _persist_sent_message_to_history
+            # 已将消息写入 history_messages；此处将其移至 unread_messages 并启动流循环）
+            sm = get_stream_manager()
             if normalized_type == "group":
-                await stream_api.get_or_create_stream(
+                target_stream = await sm.get_or_create_stream(
                     stream_id=target_stream_id,
                     platform=effective_platform,
                     group_id=resolved_id,
                     chat_type="group",
                 )
             else:
-                await stream_api.get_or_create_stream(
+                target_stream = await sm.get_or_create_stream(
                     stream_id=target_stream_id,
                     platform=effective_platform,
                     user_id=resolved_id,
                     chat_type="private",
                 )
-        except Exception:
-            pass  # 非致命：send_text 可能仍能工作
 
-        target_desc = f"{'群' if normalized_type == 'group' else '用户'} {target_stream_id[:20] if target_stream_id else '?'}"
+            ctx = target_stream.context
+            # 从 history 中移除（由 _persist_sent_message_to_history 写入），
+            # 改为注入 unread，使目标流 bot 能感知并响应
+            ctx.history_messages = [
+                m for m in ctx.history_messages if m.message_id != message_id
+            ]
+            ctx.add_unread_message(message)
+            await get_stream_loop_manager().start_stream_loop(target_stream_id)
 
-        yield None
-
-        ok = await send_text(
-            content=text,
-            stream_id=target_stream_id,
-            platform=effective_platform,
-        )
-
-        if ok:
             logger.info(f"send_to 成功: -> {target_desc} | {text[:60]!r}")
             yield True, f"已向{target_desc}发送消息"
             return
@@ -502,18 +527,19 @@ class SendToExecuteAction(BaseAction):
                     user_id=resolved_id,
                     chat_type="private",
                 )
-        except Exception:
-            pass  # 非致命：execute_action 可能仍能工作
+        except Exception as error:
+            # 非致命：execute_action 可能仍能工作，但记录原因便于排查下游失败
+            logger.debug(
+                f"[send_to_execute] get_or_create_stream 失败 "
+                f"stream_id={target_stream_id}: {error}"
+            )
 
         extra: dict[str, Any] = {}
         target_info = await _get_stream_info(target_stream_id)
         if normalized_type == "group":
-            resolved_group_id = str(group_id or "").strip()
-            if not resolved_group_id and target_info:
-                # 从已解析的 stream info 中获取 group_id，避免重复调用 _resolve_group_id
-                resolved_group_id = str(target_info.get("group_id", "") or "")
-            if resolved_group_id:
-                extra["target_group_id"] = resolved_group_id
+            # resolved_id 来自 _resolve_stream_id，已包含解析后的 group_id
+            if resolved_id:
+                extra["target_group_id"] = resolved_id
         elif target_info and target_info.get("person_id"):
             helper = get_user_query_helper()
             person = await helper.person_crud.get_by(

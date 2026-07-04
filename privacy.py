@@ -17,36 +17,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .utils import check_list_membership
+
 if TYPE_CHECKING:
     from .config import SendToConfig
 
 
-def _normalize_id(value: str | int) -> str:
-    """将 QQ 号统一转换为字符串进行比较。"""
-
-    return str(value).strip()
-
-
-def _check_list(target_id: str, list_type: str, id_list: list[str | int]) -> bool:
-    """根据黑白名单模式判断目标 ID 是否允许通过。
-
-    Args:
-        target_id: 待检测的群号或 QQ 号（字符串）
-        list_type: "blacklist" 或 "whitelist"
-        id_list: 黑/白名单列表
-
-    Returns:
-        True 表示允许（不被过滤），False 表示拒绝（被过滤掉）
-    """
-
-    normalized_list = {_normalize_id(v) for v in id_list}
-    target = _normalize_id(target_id)
-
-    if list_type == "whitelist":
-        # 白名单模式：仅列表内 ID 通过
-        return target in normalized_list
-    # 黑名单模式：列表内 ID 被拒绝
-    return target not in normalized_list
+# 保留旧名作为兼容别名，供 daily_memory 等模块直接 from .privacy import _check_list
+_check_list = check_list_membership
 
 
 def should_collect_message(config: SendToConfig, chat_type: str, target_id: str) -> bool:
@@ -126,4 +104,60 @@ def should_show_in_reminder(
             if current_chat_type != "private":
                 return False
 
+    return True
+
+
+def should_show_bot_self_in_reminder(
+    config: SendToConfig,
+    record_chat_type: str,
+    current_chat_type: str,
+) -> bool:
+    """判断 bot 自身发言所在流的摘要是否应注入到当前上下文。
+
+    bot_self_cross_visibility 取值：
+      - follow   : 跟随 private_bridge_mode，向后兼容
+      - off      : 关闭，不注入任何其他流
+      - private  : 仅私聊间互通
+      - group    : 仅群聊间互通
+      - all      : 全部流互通
+
+    Args:
+        config: 插件配置
+        record_chat_type: 摘要记录所属的聊天类型
+        current_chat_type: 当前正在渲染 reminder 的聊天类型
+
+    Returns:
+        True 表示该流摘要（可能含 bot 自身发言）可注入当前上下文
+    """
+
+    priv = config.privacy
+    mode = str(getattr(priv, "bot_self_cross_visibility", "follow") or "follow").lower()
+
+    # 兼容旧值
+    if mode == "inherit":
+        mode = "follow"
+    elif mode == "private_only":
+        mode = "private"
+    elif mode == "open":
+        mode = "all"
+
+    # follow：完全交给 private_bridge_mode，本函数不额外拦截
+    if mode == "follow":
+        return True
+
+    if mode == "off":
+        return False
+
+    if mode == "private":
+        # 仅私聊间互通：记录来自私聊且当前也是私聊
+        return record_chat_type == "private" and current_chat_type == "private"
+
+    if mode == "group":
+        # 仅群聊间互通：记录来自群聊且当前也是群聊
+        return record_chat_type != "private" and current_chat_type != "private"
+
+    if mode == "all":
+        return True
+
+    # 未知值保守放行（与 follow 等价），避免配置笔误导致整条 reminder 被清空
     return True

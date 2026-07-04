@@ -21,15 +21,24 @@ from src.core.models.message import Message
 
 from .config import SendToConfig
 from .daily_memory import get_today_memory_for_stream
-from .privacy import should_collect_message, should_show_in_reminder
+from .privacy import (
+    should_collect_message,
+    should_show_bot_self_in_reminder,
+    should_show_in_reminder,
+)
+from .utils import get_config as _get_config
+from .utils import get_or_create_lock, trim_text
+
+
+def _trim_text(text: str, max_chars: int) -> str:
+    """清洗并限制摘要长度（空文本时抛出 ValueError）。"""
+
+    return trim_text(text, max_chars, empty_raises=True)
 
 ACTOR_REMINDER_BUCKET = "actor"
 ACTOR_REMINDER_NAME = "跨聊天流上下文摘要"
 
 _stream_locks: dict[str, asyncio.Lock] = {}
-
-# Lock 字典清理阈值
-_LOCK_CLEANUP_THRESHOLD = 256
 
 
 @dataclass(slots=True)
@@ -59,15 +68,6 @@ class PendingMessageRecord:
     timestamp: float
 
 
-def _get_config(plugin: Any) -> SendToConfig:
-    """获取插件配置，缺失时返回默认配置。"""
-
-    config = getattr(plugin, "config", None)
-    if isinstance(config, SendToConfig):
-        return config
-    return SendToConfig()
-
-
 def _record_key(stream_id: str) -> str:
     """生成摘要存储键。"""
 
@@ -81,35 +81,9 @@ def _pending_key(stream_id: str) -> str:
 
 
 def _get_stream_lock(stream_id: str) -> asyncio.Lock:
-    """按聊天流获取异步锁，避免并发重复摘要；超阈值时清理未被持有的锁。"""
+    """按聊天流获取异步锁，避免并发重复摘要。"""
 
-    lock = _stream_locks.get(stream_id)
-    if lock is None:
-        # 简单清理：防止无界增长
-        if len(_stream_locks) > _LOCK_CLEANUP_THRESHOLD:
-            stale_keys = [k for k, v in _stream_locks.items() if not v.locked()]
-            for k in stale_keys:
-                del _stream_locks[k]
-        lock = asyncio.Lock()
-        _stream_locks[stream_id] = lock
-    return lock
-
-
-def _trim_text(text: str, max_chars: int) -> str:
-    """清洗并限制摘要长度。"""
-
-    normalized = "\n".join(
-        line.strip() for line in text.replace("\r\n", "\n").split("\n") if line.strip()
-    ).strip()
-    if not normalized:
-        raise ValueError("文本不能为空")
-
-    if max_chars <= 0 or len(normalized) <= max_chars:
-        return normalized
-
-    if max_chars <= 3:
-        return normalized[:max_chars]
-    return normalized[: max_chars - 3].rstrip() + "..."
+    return get_or_create_lock(_stream_locks, stream_id)
 
 
 def _deserialize_record(data: dict[str, Any] | None) -> StreamSummaryRecord | None:
@@ -473,6 +447,12 @@ async def collect_message_for_auto_summary(
         return False
 
     async with _get_stream_lock(stream_id):
+        # 注意：本锁覆盖 LLM 调用（_generate_updated_summary）。这是有意为之——
+        # summary 增量正确性要求"切 batch 时的 previous_summary"与"写回时的
+        # previous_summary"一致，否则会出现 batch1 覆盖 batch2 的并发覆盖问题。
+        # 代价是同 stream 的 collect 任务串行排队，LLM 慢时 pending 会积压。
+        # 若未来需要并行化，写回时必须重新读 previous_summary 并处理冲突（重新合并
+        # 或把 batch 放回 pending 末尾）。
         pending_messages = await _load_pending_messages(plugin, stream_id)
         pending_messages.append(pending_record)
 
@@ -590,6 +570,7 @@ def build_actor_reminder(
     filtered_records = [
         r for r in records
         if should_show_in_reminder(config, r.chat_type, r.target_id, current_chat_type)
+        and should_show_bot_self_in_reminder(config, r.chat_type, current_chat_type)
     ]
 
     visible_records = filtered_records[: max(0, visible_stream_limit)]
@@ -670,7 +651,7 @@ async def sync_actor_reminder(
             reminder_text,
         )
     except Exception as error:
-        # 某些 chatter（如 KFC）使用自定义 context_manager，不支持动态 reminder 注入
+        # 某些 chatter（如 NFC）使用自定义 context_manager，不支持动态 reminder 注入
         # 这种情况下静默失败，不影响主流程
         from src.app.plugin_system.api.log_api import get_logger
         logger = get_logger("send_to.service")

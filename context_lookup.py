@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime
 from typing import Any
 
 from src.core.models.sql_alchemy import ChatStreams, Messages
@@ -12,6 +11,14 @@ from src.kernel.db import QueryBuilder
 from src.kernel.logger import get_logger
 
 from .config import SendToConfig
+from .utils import (
+    clamp_int,
+    content_preview,
+    format_time,
+    get_config,
+    normalize_list,
+    normalize_text,
+)
 
 logger = get_logger("send_to.context_lookup")
 
@@ -19,37 +26,6 @@ _PRIVATE = "private"
 _GROUP = "group"
 _ALL = "all"
 _MEMORY_PERSON_TYPE = "person"
-
-
-def get_config(plugin: Any) -> SendToConfig:
-    """读取插件配置，失败时使用默认配置。"""
-
-    config = getattr(plugin, "config", None)
-    if isinstance(config, SendToConfig):
-        return config
-    return SendToConfig()
-
-
-def clamp_int(value: int, *, minimum: int, maximum: int) -> int:
-    """将整数压入指定范围。"""
-
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        parsed = minimum
-    return max(minimum, min(maximum, parsed))
-
-
-def normalize_text(value: str | None) -> str:
-    """清理文本参数。"""
-
-    return str(value or "").strip()
-
-
-def normalize_list(values: list[str]) -> set[str]:
-    """规范化配置列表。"""
-
-    return {str(item).strip().lower() for item in values if str(item).strip()}
 
 
 def normalize_chat_scope(chat_scope: str, config: SendToConfig) -> str:
@@ -73,24 +49,6 @@ def normalize_chat_scope(chat_scope: str, config: SendToConfig) -> str:
         if candidate in allowed:
             return candidate
     return ""
-
-
-def format_time(value: Any) -> str:
-    """格式化 Unix 时间戳。"""
-
-    try:
-        return datetime.fromtimestamp(float(value)).strftime("%Y-%m-%d %H:%M:%S")
-    except (TypeError, ValueError, OSError, OverflowError):
-        return str(value or "")
-
-
-def content_preview(value: Any, max_chars: int) -> str:
-    """生成消息正文预览。"""
-
-    text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
-    if len(text) <= max_chars:
-        return text
-    return text[: max(0, max_chars - 1)] + "…"
 
 
 def ensure_platform_allowed(config: SendToConfig, platform: str) -> tuple[bool, str]:
@@ -487,9 +445,9 @@ async def lookup_user_context(
     if not normalized_scope:
         return False, "当前配置未允许任何聊天范围"
 
-    normalized_max_streams = clamp_int(max_streams or config.lookup.max_streams_default, minimum=1, maximum=max(1, config.lookup.max_streams_max))
+    normalized_max_streams = clamp_int(max_streams or config.lookup.streams_default, minimum=1, maximum=max(1, config.lookup.streams_max))
     normalized_limit = clamp_int(per_stream_limit or config.lookup.per_stream_limit_default, minimum=1, maximum=max(1, config.lookup.per_stream_limit_max))
-    normalized_chars = clamp_int(max_chars_per_message or config.lookup.max_chars_per_message_default, minimum=40, maximum=max(40, config.lookup.max_chars_per_message_max))
+    normalized_chars = clamp_int(max_chars_per_message or config.lookup.chars_per_message_default, minimum=40, maximum=max(40, config.lookup.chars_per_message_max))
     effective_around_user = around_user if around_user is not None else config.lookup.around_user_default
 
     streams = await find_user_streams(person_id=person_id, platform=normalized_platform, chat_scope=normalized_scope, group_id=group_id, max_streams=normalized_max_streams, config=config)

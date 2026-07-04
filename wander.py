@@ -108,14 +108,14 @@ async def _list_candidate_targets(
 
     规则：
     - 同 platform
-    - 最近 active_window_min 分钟内有活动
+    - 最近 active_window_minutes 分钟内有活动
     - 跳过源流自身
     - 私聊默认禁用（除非 allow_private_target=True）
     - 通过 target_scope 过滤
     - 通过单目标冷却过滤
     - 取最近活跃的前 candidate_top_k 个
     """
-    cutoff_ts = time.time() - cfg_wander.active_window_min * 60
+    cutoff_ts = time.time() - cfg_wander.active_window_minutes * 60
 
     rows = await (
         QueryBuilder(ChatStreams)
@@ -127,7 +127,7 @@ async def _list_candidate_targets(
     streams = cast(list[ChatStreams], rows)
 
     candidates: list[dict[str, Any]] = []
-    cooldown_sec = cfg_wander.per_target_cooldown_min * 60
+    cooldown_sec = cfg_wander.per_target_cooldown_minutes * 60
 
     for stream in streams:
         sid = str(getattr(stream, "stream_id", "") or "")
@@ -286,9 +286,9 @@ async def _llm_decide(
     )
 
     try:
-        if cfg.decision_model:
+        if cfg.decision_task_name:
             model_set = llm_api.get_model_set_by_name(
-                cfg.decision_model,
+                cfg.decision_task_name,
                 temperature=cfg.decision_temperature,
                 max_tokens=cfg.decision_max_tokens,
             )
@@ -413,7 +413,7 @@ class WanderEventHandler(BaseEventHandler):
             return False
 
         # 全局冷却
-        if time.time() - _last_global_active_ts < cfg.global_cooldown_sec:
+        if time.time() - _last_global_active_ts < cfg.global_cooldown_seconds:
             return False
 
         # 每小时上限

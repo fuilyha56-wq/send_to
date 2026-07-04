@@ -44,3 +44,7 @@ htmlcov/
 # MoFox-Bot specific
 config/local_*.toml
 *.log
+
+# Agent / Claude 工作目录（不纳入版本控制）
+.claude
+.agents

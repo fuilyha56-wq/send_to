@@ -8,6 +8,7 @@ from src.app.plugin_system.types import PermissionLevel
 from src.kernel.logger import get_logger
 
 from .daily_memory import force_generate_today
+from .utils import content_preview
 
 logger = get_logger("send_to.commands")
 
@@ -49,9 +50,7 @@ class SendToMemoryCommand(BaseCommand):
             await self._reply("无法生成短期记忆：当日无消息、群被排除或未启用此功能。")
             return False, "no record"
 
-        preview = record.summary
-        if len(preview) > 120:
-            preview = preview[:117] + "..."
+        preview = content_preview(record.summary, 120)
         await self._reply(
             f"已为本群（{record.group_name or record.group_id}）重新生成 {record.memory_date} 的短期记忆。\n"
             f"消息总数：{record.message_count}\n"

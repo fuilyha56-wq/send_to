@@ -43,14 +43,13 @@ class SendToAutoSummaryHandler(BaseEventHandler):
             )
         direction = "outbound" if event_name == EventType.ON_MESSAGE_SENT.value else "inbound"
 
-        async def _run_summary() -> None:
+        async def _run_background() -> None:
+            # 摘要与每日短期记忆各自独立 try，互不影响
             try:
                 if config.index.auto_summary_enabled:
                     await collect_message_for_auto_summary(self.plugin, message, direction=direction)
             except Exception as error:
                 logger.error(f"自动摘要更新失败: stream_id={message.stream_id}, error={error}", exc_info=True)
-
-        async def _run_daily_memory() -> None:
             try:
                 if direction == "outbound":
                     await register_bot_message(self.plugin, message)
@@ -61,6 +60,5 @@ class SendToAutoSummaryHandler(BaseEventHandler):
 
         stream_short = (str(message.stream_id) or "unknown")[:8]
         task_manager = get_task_manager()
-        task_manager.create_task(_run_summary(), name=f"send_to_auto_summary_{stream_short}", daemon=True)
-        task_manager.create_task(_run_daily_memory(), name=f"send_to_daily_memory_{stream_short}", daemon=True)
+        task_manager.create_task(_run_background(), name=f"send_to_auto_bg_{stream_short}", daemon=True)
         return EventDecision.SUCCESS, params

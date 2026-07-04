@@ -6,9 +6,9 @@
 使 LLM 在决策时能看到跨流上下文，避免 send_to 发消息时上下文割裂。
 
 可通过 auto_inject.target_prompts 手动补充或限制模板名称；
-NFC/KFC 结构化上下文格式列表可通过 auto_inject.kfc_prompts 调整。
+NFC 结构化上下文格式列表可通过 auto_inject.nfc_prompts 调整。
 
-KFC 模式下，plugin_source.py 会自动将 values.extra 中的 legacy 文本
+NFC 模式下，plugin_source.py 会自动将 values.extra 中的 legacy 文本
 归一化为 ContextContribution(notice/turn)，功能与直接使用
 context_contributions 等效，同时避免向 params 顶层添加新 key
 导致 EventBus next_params 签名不一致校验失败。
@@ -28,37 +28,18 @@ from src.kernel.db import QueryBuilder
 from src.kernel.event import EventDecision
 
 from .config import SendToConfig
+from .utils import (
+    content_preview as _content_preview,
+    format_time as _format_time,
+    get_config as _get_config,
+    normalize_text as _normalize_text,
+)
 
-logger = get_logger("send_to.event_handler")
+logger = get_logger("send_to.auto_inject")
 
-
-def _get_config(plugin: Any) -> SendToConfig:
-    """从插件实例读取配置，失败时回退默认配置。"""
-    config = getattr(plugin, "config", None)
-    if isinstance(config, SendToConfig):
-        return config
-    return SendToConfig()
-
-
-def _normalize_text(value: str | None) -> str:
-    return str(value or "").strip()
-
-
-def _format_time(value: Any) -> str:
-    """格式化 Unix 时间戳。"""
-    from datetime import datetime
-    try:
-        return datetime.fromtimestamp(float(value)).strftime("%Y-%m-%d %H:%M:%S")
-    except (TypeError, ValueError, OSError, OverflowError):
-        return str(value or "")
-
-
-def _content_preview(value: Any, max_chars: int) -> str:
-    """生成消息正文预览。"""
-    text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
-    if len(text) <= max_chars:
-        return text
-    return text[:max(0, max_chars - 1)] + "…"
+# 当群聊场景下无法解析出本轮触发用户（无 sender 的事件流、定时触发、外部回灌等），
+# 且配置允许时，用此哨兵表示"以 bot 自身为注入对象"，由 execute 识别后走 bot 查询路径。
+_BOT_SELF_SENTINEL = "__bot_self__"
 
 
 def _normalize_identity(value: Any) -> str:
@@ -208,11 +189,15 @@ def _resolve_effective_person_id(
     chat_type: str,
     recent_messages: list[Any],
     trigger_sender_id: str = "",
+    fallback_to_bot_self: bool = False,
 ) -> str:
     """解析本轮跨流注入的目标用户，群聊优先使用触发消息用户。
 
     群聊中如果无法从 values/recent_msgs 解析出触发用户 person_id，
-    返回空串而非 stream_person_id，避免用群聊占位值做跨流查询。
+    默认返回空串而非 stream_person_id，避免用群聊占位值做跨流查询。
+    若 fallback_to_bot_self 为 True 且 current_stream.bot_id 非空，
+    则返回哨兵 _BOT_SELF_SENTINEL，表示本轮以 bot 自身为注入对象
+    （用于无 sender 的事件流场景）。
     """
     stream_person_id = _normalize_text(getattr(current_stream, "person_id", ""))
     trigger_person_id = _extract_trigger_person_id(values)
@@ -224,8 +209,14 @@ def _resolve_effective_person_id(
             bot_id=str(getattr(current_stream, "bot_id", "") or ""),
             trigger_sender_id=trigger_sender_id,
         )
-        # 群聊不回退到 stream_person_id（可能是占位值），返回空串让调用方跳过注入
-        return resolved_person_id
+        if resolved_person_id:
+            return resolved_person_id
+        # 群聊无 sender 兜底：以 bot 自身为注入对象
+        if fallback_to_bot_self:
+            bot_id = _normalize_text(getattr(current_stream, "bot_id", ""))
+            if bot_id:
+                return _BOT_SELF_SENTINEL
+        return ""
     return trigger_person_id or stream_person_id
 
 
@@ -285,13 +276,20 @@ async def _resolve_cross_streams(
     platform: str,
     person_id: str,
     config: SendToConfig,
+    subject_kind: str = "user",
+    bot_id: str = "",
 ) -> list[dict[str, Any]]:
-    """查询当前用户在其他聊天流的近期消息摘要。
+    """查询当前主体（用户或 bot 自身）在其他聊天流的近期消息摘要。
 
-    查询策略：
+    查询策略（subject_kind="user"）：
     - 私聊→查群聊 + 同平台其他私聊
     - 群聊→查该用户的私聊
     排除当前流本身，按活跃度排序。
+
+    查询策略（subject_kind="bot"）：
+    - 以 bot_id 作为 sender_id 查 Messages，找出 bot 近期活跃过的其他流
+    - 候选流不分群聊/私聊，统一按 last_active_time 排序
+    - timeline 中只保留 bot 自己发的消息（sender_id == bot_id）
     """
     # 确定当前流类型
     current_rows = await (
@@ -305,11 +303,43 @@ async def _resolve_cross_streams(
 
     current_stream = current_rows[0]
     current_chat_type = str(getattr(current_stream, "chat_type", "") or "")
+    stream_bot_id = str(getattr(current_stream, "bot_id", "") or "")
 
     max_streams = config.auto_inject.max_streams
     candidate_streams: list[Any] = []
 
-    if current_chat_type == "private":
+    if subject_kind == "bot":
+        # bot 自身模式：按 sender_id == bot_id 找 bot 活跃过的其他流
+        if not bot_id:
+            return []
+        scan_limit = max_streams * 20
+        bot_msg_rows = await (
+            QueryBuilder(Messages)
+            .filter(sender_id=bot_id, platform=platform)
+            .order_by("-time")
+            .limit(scan_limit)
+            .all()
+        )
+        bot_stream_ids = list(
+            dict.fromkeys(
+                str(getattr(row, "stream_id", "") or "")
+                for row in bot_msg_rows
+                if getattr(row, "stream_id", None)
+            )
+        )
+        if bot_stream_ids:
+            stream_rows = await (
+                QueryBuilder(ChatStreams)
+                .filter(stream_id__in=bot_stream_ids, platform=platform)
+                .order_by("-last_active_time")
+                .limit(max_streams + 5)
+                .all()
+            )
+            for row in stream_rows:
+                sid = str(getattr(row, "stream_id", "") or "")
+                if sid and sid != current_stream_id:
+                    candidate_streams.append(row)
+    elif current_chat_type == "private":
         # 私聊→查群聊 + 其他私聊
         # 1. 该用户的群聊（通过消息记录找活跃群）
         scan_limit = max_streams * 20
@@ -400,13 +430,23 @@ async def _resolve_cross_streams(
         )
         chat_type = str(getattr(stream, "chat_type", "") or "")
 
-        msg_rows = await (
-            QueryBuilder(Messages)
-            .filter(stream_id=sid)
-            .order_by("-time")
-            .limit(per_limit)
-            .all()
-        )
+        if subject_kind == "bot":
+            # bot 模式：只抓 bot 自己在该流的发言
+            msg_rows = await (
+                QueryBuilder(Messages)
+                .filter(stream_id=sid, sender_id=bot_id, platform=platform)
+                .order_by("-time")
+                .limit(per_limit)
+                .all()
+            )
+        else:
+            msg_rows = await (
+                QueryBuilder(Messages)
+                .filter(stream_id=sid)
+                .order_by("-time")
+                .limit(per_limit)
+                .all()
+            )
 
         if not msg_rows:
             continue
@@ -416,8 +456,7 @@ async def _resolve_cross_streams(
             msg_time = _format_time(getattr(msg, "time", None))
             sender_id = str(getattr(msg, "sender_id", "") or "")
             sender_person_id = str(getattr(msg, "person_id", "") or "")
-            bot_id = str(getattr(current_stream, "bot_id", "") or "")
-            is_bot = sender_person_id == "bot" or bool(bot_id and sender_id == bot_id)
+            is_bot = sender_person_id == "bot" or bool(stream_bot_id and sender_id == stream_bot_id)
 
             content_text = _content_preview(
                 getattr(msg, "processed_plain_text", None) or getattr(msg, "content", ""),
@@ -490,8 +529,8 @@ async def _build_summary_injection_text(
         return ""
 
     lines = [
-        "## 跨流摘要索引",
-        "以下是 send_to 自动维护的其他聊天流摘要，用于提供全局背景；它是摘要，不是原话：",
+        "<cross_stream_summary>",
+        "以下是其他聊天流的摘要，供你了解全局背景（摘要，非原话）：",
         "",
     ]
     for idx, record in enumerate(filtered, start=1):
@@ -502,27 +541,43 @@ async def _build_summary_injection_text(
             id_text = f"【{id_label}: {record.target_id}】"
         lines.append(f"{idx}. {title} {id_text} [{record.platform or 'unknown'}:{record.chat_type or 'unknown'}]")
         lines.append(f"   摘要：{record.summary}")
+    lines.append("</cross_stream_summary>")
     return "\n".join(lines)
 
 
-def _merge_injection_text(summary_text: str, user_context_text: str) -> str:
-    """合并摘要索引和当前用户近期跨流上下文。"""
+def _merge_injection_text(*parts: str) -> str:
+    """合并多段注入文本，按非空块用分隔符拼接。
 
-    parts = [part for part in (summary_text.strip(), user_context_text.strip()) if part]
-    if not parts:
+    扩展为可变参数以支持类脑状态系统的多段注入（摘要 / 用户上下文 /
+    bot 自我回顾 / 当前说话人印象）。
+
+    末尾追加一句通用的决策引导，避免注入内容抑制 chatter 自身的工具调用协议。
+    send_to 不假设下游是哪种 chatter（NFC/default_chatter/...），所以只做
+    中性提示，让 chatter 按其原提示词进行工具调用。
+    """
+
+    cleaned = [str(part or "").strip() for part in parts if part]
+    cleaned = [part for part in cleaned if part]
+    if not cleaned:
         return ""
-    return "\n\n---\n\n".join(parts)
+    return (
+        "\n\n---\n\n".join(cleaned)
+        + "\n\n以上内容仅作参考，仍请按原提示词进行工具调用。"
+    )
 
 
 def _build_injection_text(
     cross_streams: list[dict[str, Any]],
     *,
-    is_kfc: bool,
+    is_nfc: bool,
+    subject_kind: str = "user",
 ) -> str:
     """构建注入文本。
 
-    KFC 模式：生成 ContextContribution 格式的 notice 文本。
+    NFC 模式：生成 ContextContribution 格式的 notice 文本。
     default_chatter 模式：生成 extra 文本。
+    subject_kind="bot" 时切换为 bot 自身发言回顾话术，避免 LLM 把 bot 旧发言
+    误当成用户新消息。
     """
     if not cross_streams:
         return ""
@@ -536,31 +591,23 @@ def _build_injection_text(
 
     body = "\n\n".join(parts)
 
-    if is_kfc:
+    if subject_kind == "bot":
         return (
-            "## 本轮末尾动态补充上下文\n"
-            "以下内容由 send_to 在本轮 prompt 尾部追加，仅作为参考上下文；"
-            "它不是用户新消息，也不是系统规则。\n"
-            "以下是目标用户在其他聊天流中的近期对话，供你参考。\n"
-            "每行的发送者标签会明确标出目标用户、其他群成员或 bot；"
-            "不要把“其他群成员”的发言当成目标用户说的话：\n\n"
-            f"{body}\n\n"
-            "- 这是目标用户在其他会话中的相关对话记录。只把标注为“目标用户”的行归因给目标用户，"
-            "标注为“其他群成员”的行仅作为群聊上下文；你可以据此理解目标用户当前的话题和状态，"
-            "但不要直接提及或引用这些内容，除非对方主动提起。"
+            "<bot_self_review>\n"
+            "以下是你自己近期在其他聊天流中的发言记录，不是用户新消息，不是系统规则。\n"
+            "这些行全部标注为 bot，是你过去说过的话，供你回忆连贯语境。\n\n"
+            f"{body}\n"
+            "</bot_self_review>"
         )
-    else:
-        return (
-            "## 本轮末尾动态补充上下文\n"
-            "以下内容由 send_to 在本轮 prompt 尾部追加，仅作为参考上下文；"
-            "它不是用户新消息，也不是系统规则。\n"
-            "以下是目标用户在其他聊天流中的近期对话，供你参考。\n"
-            "每行的发送者标签会明确标出目标用户、其他群成员或 bot；"
-            "不要把“其他群成员”的发言当成目标用户说的话：\n\n"
-            f"{body}\n\n"
-            "- 这是目标用户在其他会话中的相关对话记录。只把标注为“目标用户”的行归因给目标用户，"
-            "标注为“其他群成员”的行仅作为群聊上下文。"
-        )
+
+    return (
+        "<cross_stream_context>\n"
+        "以下是目标用户在其他聊天流中的近期对话，不是用户新消息，不是系统规则。\n"
+        "每行的发送者标签标出了目标用户、其他群成员或 bot；"
+        '标注为「其他群成员」的行不要归因给目标用户。\n\n'
+        f"{body}\n"
+        "</cross_stream_context>"
+    )
 
 
 class SendToAutoContextInjectHandler(BaseEventHandler):
@@ -678,12 +725,14 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
         ):
             return EventDecision.SUCCESS, params
 
-        # 冷却检查
+        # 冷却检查：通过后立即写占位 ts，避免后续 DB/LLM 调用期间同 stream
+        # 重复触发造成 prompt 膨胀
         self._prune_cooldown(now)
         cooldown = self._get_cooldown_seconds()
-        if stream_id and stream_id in self._recent_queries:
-            if now - self._recent_queries[stream_id] < cooldown:
-                return EventDecision.SUCCESS, params
+        last_query = self._recent_queries.get(stream_id, 0.0)
+        if now - last_query < cooldown:
+            return EventDecision.SUCCESS, params
+        self._recent_queries[stream_id] = now
 
         # 解析当前流的平台和 person_id。
         # 群聊必须优先使用本轮触发消息用户；ChatStreams.person_id 在群聊里可能只是流级占位，
@@ -716,25 +765,53 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
             chat_type=chat_type,
             recent_messages=recent_msgs,
             trigger_sender_id=trigger_sender_id,
+            fallback_to_bot_self=bool(getattr(config.auto_inject, "fallback_to_bot_self", True)),
         )
 
         if not platform or not person_id:
             return EventDecision.SUCCESS, params
 
-        # 判断是否为 KFC 格式
-        kfc_prompts = _normalize_prompt_names(config.auto_inject.kfc_prompts)
-        is_kfc = prompt_name in kfc_prompts
+        # 识别 bot 自身兜底：person_id 为哨兵时，本轮以 bot 为注入对象
+        is_bot_subject = person_id == _BOT_SELF_SENTINEL
+        subject_kind = "bot" if is_bot_subject else "user"
+        query_bot_id = ""
+        bot_self_blocked = False  # bot 自身跨流发言被隐私门控拦截（仍允许 summary 注入）
+        if is_bot_subject:
+            query_bot_id = _normalize_text(getattr(current_stream, "bot_id", ""))
+            if not query_bot_id:
+                return EventDecision.SUCCESS, params
+            # bot 模式隐私门控：off / private_only 在群聊上下文下跳过 bot 跨流发言
+            try:
+                from .privacy import should_show_bot_self_in_reminder
 
-        try:
-            cross_streams = await _resolve_cross_streams(
-                current_stream_id=stream_id,
-                platform=platform,
-                person_id=person_id,
-                config=config,
-            )
-        except Exception as exc:
-            logger.warning(f"跨流上下文查询失败: {exc}")
-            cross_streams = []
+                if not should_show_bot_self_in_reminder(
+                    config,
+                    record_chat_type="private",
+                    current_chat_type=chat_type,
+                ):
+                    bot_self_blocked = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"bot 自身隐私门控检查失败，保守放行: {exc}")
+
+        # 判断是否为 NFC 格式
+        nfc_prompts = _normalize_prompt_names(config.auto_inject.nfc_prompts)
+        is_nfc = prompt_name in nfc_prompts
+
+        # 查询跨流上下文：bot_self_blocked 时跳过（仍允许 summary 段注入）
+        cross_streams: list[dict[str, Any]] = []
+        if not (is_bot_subject and bot_self_blocked):
+            try:
+                cross_streams = await _resolve_cross_streams(
+                    current_stream_id=stream_id,
+                    platform=platform,
+                    person_id=person_id if not is_bot_subject else "",
+                    config=config,
+                    subject_kind=subject_kind,
+                    bot_id=query_bot_id,
+                )
+            except Exception as exc:
+                logger.warning(f"跨流上下文查询失败: {exc}")
+                cross_streams = []
 
         summary_text = await _build_summary_injection_text(
             self.plugin,
@@ -742,15 +819,81 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
             current_stream_id=stream_id,
             limit=int(getattr(config.auto_inject, "summary_stream_limit", 6)),
         )
-        user_context_text = _build_injection_text(cross_streams, is_kfc=is_kfc)
-        injection_text = _merge_injection_text(summary_text, user_context_text)
+        user_context_text = _build_injection_text(
+            cross_streams, is_nfc=is_nfc, subject_kind=subject_kind
+        )
+
+        # inject_bot_context：始终注入 bot 自身在其他流的上下文（独立于 fallback_to_bot_self）
+        bot_context_text = ""
+        if (
+            not is_bot_subject
+            and getattr(config.auto_inject, "inject_bot_context", False)
+        ):
+            _bot_id = _normalize_text(getattr(current_stream, "bot_id", ""))
+            if _bot_id:
+                # 隐私门控
+                _bot_blocked = False
+                try:
+                    from .privacy import should_show_bot_self_in_reminder
+
+                    if not should_show_bot_self_in_reminder(
+                        config,
+                        record_chat_type="private",
+                        current_chat_type=chat_type,
+                    ):
+                        _bot_blocked = True
+                except Exception:  # noqa: BLE001
+                    pass
+
+                if not _bot_blocked:
+                    try:
+                        bot_cross_streams = await _resolve_cross_streams(
+                            current_stream_id=stream_id,
+                            platform=platform,
+                            person_id="",
+                            config=config,
+                            subject_kind="bot",
+                            bot_id=_bot_id,
+                        )
+                        if bot_cross_streams:
+                            bot_context_text = _build_injection_text(
+                                bot_cross_streams, is_nfc=is_nfc, subject_kind="bot"
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(f"bot 上下文注入查询失败: {exc}")
+
+        # 类脑状态系统：人物印象注入已迁移至 brian_stats 插件
+        impression_text = ""
+
+        injection_text = _merge_injection_text(
+            summary_text, user_context_text, bot_context_text, impression_text
+        )
 
         if not injection_text:
             return EventDecision.SUCCESS, params
 
-        # 记录冷却
-        if stream_id:
-            self._recent_queries[stream_id] = now
+        self._apply_injection(params, values, injection_text)
+
+        stream_count = len(cross_streams)
+        subject_tag = "bot" if is_bot_subject else "user"
+        blocked_tag = ",blocked" if bot_self_blocked else ""
+        logger.info(
+            f"已注入合并跨流上下文: prompt={prompt_name}, "
+            f"stream_id={stream_id}, subject={subject_tag}{blocked_tag}, "
+            f"user_streams={stream_count}, summary={bool(summary_text)}"
+        )
+        return EventDecision.SUCCESS, params
+
+    @staticmethod
+    def _apply_injection(
+        params: dict[str, Any],
+        values: dict[str, Any],
+        injection_text: str,
+    ) -> None:
+        """把注入文本写入 params，优先 context_contributions，否则回退 values.extra。
+
+        抽出来供主路径与 bot 自身隐私门控早退路径共用，避免逻辑重复。
+        """
 
         context_contributions = params.get("context_contributions")
         if isinstance(context_contributions, list):
@@ -776,10 +919,3 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
             separator = "\n\n" if existing_extra else ""
             values["extra"] = existing_extra + separator + injection_text
             params["values"] = values
-
-        stream_count = len(cross_streams)
-        logger.info(
-            f"已注入合并跨流上下文: prompt={prompt_name}, "
-            f"stream_id={stream_id}, user_streams={stream_count}, summary={bool(summary_text)}"
-        )
-        return EventDecision.SUCCESS, params

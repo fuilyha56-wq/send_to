@@ -76,7 +76,7 @@ class SendToConfig(BaseConfig):
             description="是否启用 send_to 插件",
         )
         version: str = Field(
-            default="3.0.3",
+            default="3.0.5",
             description="插件版本",
             disabled=True,
         )
@@ -85,15 +85,15 @@ class SendToConfig(BaseConfig):
     class DispatchSection(SectionBase):
         """跨流发送和执行配置。"""
 
-        enable_send_text: bool = Field(
+        send_text_enabled: bool = Field(
             default=True,
             description="启用 send_to 轻量跨流文本发送",
         )
-        enable_execute_action: bool = Field(
+        execute_action_enabled: bool = Field(
             default=False,
-            description="启用 send_to_execute 跨流执行 Action（默认关闭）",
+            description="启用 send_to_execute 跨流执行 Action",
         )
-        enable_target_tools: bool = Field(
+        target_tools_enabled: bool = Field(
             default=True,
             description="启用群/用户列表与查找工具",
         )
@@ -126,9 +126,9 @@ class SendToConfig(BaseConfig):
             default=50,
             description="最多携带的源流上下文条数",
         )
-        enable_debug_command: bool = Field(
+        debug_command_enabled: bool = Field(
             default=False,
-            description="启用 relay 调试命令（默认关闭）",
+            description="启用 relay 调试命令",
         )
 
     @config_section("index", title="跨流摘要", tag="ai")
@@ -141,7 +141,7 @@ class SendToConfig(BaseConfig):
         )
         inject_summary_reminder: bool = Field(
             default=False,
-            description="将跨流摘要注入 actor reminder（默认关闭，避免动态内容降低 prompt cache 命中率）",
+            description="将跨流摘要注入 actor reminder（避免动态内容降低 prompt cache 命中率）",
         )
         auto_summary_enabled: bool = Field(
             default=True,
@@ -190,7 +190,7 @@ class SendToConfig(BaseConfig):
         )
         inject_into_reminder: bool = Field(
             default=False,
-            description="将本群今日短期记忆注入固定 reminder（默认关闭，建议通过 auto_inject 按轮注入）",
+            description="将本群今日短期记忆注入固定 reminder（建议通过 auto_inject 按轮注入）",
         )
         max_summary_chars: int = Field(
             default=1400,
@@ -200,7 +200,7 @@ class SendToConfig(BaseConfig):
             default=60,
             description="跨天归档扫描间隔",
         )
-        enable_command: bool = Field(
+        command_enabled: bool = Field(
             default=True,
             description="启用 send_to_memory_command 强制生成命令",
         )
@@ -209,26 +209,29 @@ class SendToConfig(BaseConfig):
     class LookupSection(SectionBase):
         """上下文和记忆查询配置。"""
 
-        enable_stream_context: bool = Field(
+        # ── 工具启用开关 ────────────────────────────────────────────────
+        stream_context_enabled: bool = Field(
             default=True,
             description="启用 send_to_get_stream_context",
         )
-        enable_daily_memory: bool = Field(
+        daily_memory_tool_enabled: bool = Field(
             default=True,
             description="启用 send_to_get_daily_memory",
         )
-        enable_find_stream: bool = Field(
+        find_stream_enabled: bool = Field(
             default=True,
             description="启用 send_to_find_stream",
         )
-        enable_user_memory: bool = Field(
+        user_memory_enabled: bool = Field(
             default=True,
             description="启用 send_to_lookup_user_memory",
         )
-        enable_user_context: bool = Field(
+        user_context_enabled: bool = Field(
             default=True,
             description="启用 send_to_lookup_user_context",
         )
+
+        # ── 容量配额（default/max 配对）────────────────────────────────
         memory_top_n_default: int = Field(
             default=8,
             description="长期记忆默认返回条数",
@@ -245,22 +248,24 @@ class SendToConfig(BaseConfig):
             default=80,
             description="每流最大消息数",
         )
-        max_streams_default: int = Field(
+        streams_default: int = Field(
             default=4,
             description="默认读取流数量",
         )
-        max_streams_max: int = Field(
+        streams_max: int = Field(
             default=10,
             description="最大读取流数量",
         )
-        max_chars_per_message_default: int = Field(
+        chars_per_message_default: int = Field(
             default=300,
             description="默认单条消息长度",
         )
-        max_chars_per_message_max: int = Field(
+        chars_per_message_max: int = Field(
             default=1000,
             description="最大单条消息长度",
         )
+
+        # ── 查询行为 ────────────────────────────────────────────────────
         candidate_stream_scan_multiplier: int = Field(
             default=5,
             description="按用户消息回溯群聊候选流的扫描倍数",
@@ -290,6 +295,7 @@ class SendToConfig(BaseConfig):
     class AutoInjectSection(SectionBase):
         """prompt 构建时自动注入跨流上下文。"""
 
+        # ── 主开关与行为 ────────────────────────────────────────────────
         enabled: bool = Field(
             default=True,
             description="启用 send_to_auto_context_inject：合并注入跨流摘要和当前用户近期上下文",
@@ -302,17 +308,19 @@ class SendToConfig(BaseConfig):
             default=True,
             description="自动注入时同时合并跨流摘要索引",
         )
+        inject_bot_context: bool = Field(
+            default=False,
+            description="始终注入 bot 自身在其他流的近期发言上下文（范围受 privacy.bot_self_cross_visibility 限制）",
+        )
+        fallback_to_bot_self: bool = Field(
+            default=True,
+            description="无发送者时回退以 bot 自身为注入对象，避免事件流场景丢失跨流上下文",
+        )
+
+        # ── 容量配额 ────────────────────────────────────────────────────
         summary_stream_limit: int = Field(
             default=6,
             description="自动注入时最多附带多少条跨流摘要",
-        )
-        target_prompts: list[str] = Field(
-            default_factory=list,
-            description="手动补充 prompt 名称",
-        )
-        kfc_prompts: list[str] = Field(
-            default_factory=list,
-            description="手动补充 prompt 名称",
         )
         per_stream_limit: int = Field(
             default=10,
@@ -331,14 +339,42 @@ class SendToConfig(BaseConfig):
             description="同一流自动注入冷却秒数",
         )
 
+        # ── Prompt 名单（手动指定）────────────────────────────────────
+        target_prompts: list[str] = Field(
+            default_factory=list,
+            description="手动补充允许 auto_inject 注入的 prompt 名称（为空则自动发现）",
+        )
+        nfc_prompts: list[str] = Field(
+            default_factory=list,
+            description="标记为 NFC（Normalized-Frame-Context）结构化格式的 prompt 名称，注入时走结构化分支",
+        )
+
     @config_section("privacy", title="隐私与脱敏", tag="security")
     class PrivacySection(SectionBase):
         """隐私、黑白名单和脱敏配置。"""
 
+        # ── 跨流可见性 ──────────────────────────────────────────────────
         private_bridge_mode: str = Field(
             default="two_way",
             description="私聊互通模式：off/one_way/two_way",
         )
+        bot_self_cross_visibility: str = Field(
+            default="follow",
+            description=(
+                "bot 自身发言跨流可见性："
+                "follow（跟随 private_bridge_mode）/ "
+                "off（关闭，不注入任何其他流）/ "
+                "private（仅私聊间互通）/ "
+                "group（仅群聊间互通）/ "
+                "all（全部流互通）"
+            ),
+        )
+        allowed_chat_scopes: list[str] = Field(
+            default_factory=list,
+            description="允许的聊天范围",
+        )
+
+        # ── 名单（按 chat_type 切换黑白名单模式）────────────────────────
         group_list_type: str = Field(
             default="blacklist",
             description="群聊名单模式：blacklist/whitelist",
@@ -355,10 +391,8 @@ class SendToConfig(BaseConfig):
             default_factory=list,
             description="私聊黑/白名单",
         )
-        allowed_chat_scopes: list[str] = Field(
-            default_factory=list,
-            description="允许的聊天范围",
-        )
+
+        # ── 名单（allowlist/blocklist 分开）────────────────────────────
         platform_allowlist: list[str] = Field(
             default_factory=list,
             description="平台白名单",
@@ -383,6 +417,8 @@ class SendToConfig(BaseConfig):
             default_factory=list,
             description="群黑名单",
         )
+
+        # ── 字段暴露控制 ────────────────────────────────────────────────
         require_user_identity: bool = Field(
             default=True,
             description="查询用户上下文时要求明确用户身份",
@@ -410,15 +446,15 @@ class SendToConfig(BaseConfig):
 
         enabled: bool = Field(
             default=False,
-            description="是否启用自动串门（默认关闭）",
+            description="是否启用自动串门",
         )
         dry_run: bool = Field(
             default=True,
             description="空跑模式：只记录决策，不真正发送",
         )
-        decision_model: str = Field(
+        decision_task_name: str = Field(
             default="",
-            description="决策模型名，留空时使用 model_tasks.sub_actor",
+            description="决策模型任务名，留空时使用 model_tasks.sub_actor",
         )
 
         # ── 一阶段廉价过滤 ────────────────────────────────────────────────
@@ -426,11 +462,11 @@ class SendToConfig(BaseConfig):
             default=0.08,
             description="一阶段过滤通过概率",
         )
-        global_cooldown_sec: int = Field(
+        global_cooldown_seconds: int = Field(
             default=180,
             description="全局冷却秒数",
         )
-        per_target_cooldown_min: int = Field(
+        per_target_cooldown_minutes: int = Field(
             default=60,
             description="单目标冷却分钟数",
         )
@@ -440,7 +476,7 @@ class SendToConfig(BaseConfig):
         )
 
         # ── 候选目标筛选 ──────────────────────────────────────────────────
-        active_window_min: int = Field(
+        active_window_minutes: int = Field(
             default=30,
             description="候选目标最近活跃窗口分钟数",
         )

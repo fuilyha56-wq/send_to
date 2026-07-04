@@ -1,35 +1,136 @@
 {
-  "name": "send_to",
-  "version": "3.0.3-alpha",
-  "description": "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入",
-  "author": "MoFox Team",
-  "license": "GPL-3.0",
-  "dependencies": {
-    "plugins": [],
-    "components": []
-  },
-  "include": [
-    {"component_type": "action", "component_name": "send_to", "dependencies": [], "enabled": true},
-    {"component_type": "action", "component_name": "send_to_execute", "dependencies": [], "enabled": false},
-    {"component_type": "action", "component_name": "send_to_update_stream_summary", "dependencies": [], "enabled": true},
-    {"component_type": "action", "component_name": "send_to_relay_intent", "dependencies": [], "enabled": false},
-    {"component_type": "tool", "component_name": "send_to_list_groups", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_list_users", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_lookup_users", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_find_stream", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_get_stream_context", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_get_daily_memory", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_lookup_user_memory", "dependencies": [], "enabled": true},
-    {"component_type": "tool", "component_name": "send_to_lookup_user_context", "dependencies": [], "enabled": true},
-    {"component_type": "event_handler", "component_name": "send_to_auto_summary", "dependencies": [], "enabled": true},
-    {"component_type": "event_handler", "component_name": "send_to_auto_context_inject", "dependencies": [], "enabled": true},
-    {"component_type": "event_handler", "component_name": "send_to_wander", "description": "监听消息事件，由 sub_actor 决策是否主动串门（默认关闭）", "dependencies": [], "enabled": false},
-    {"component_type": "command", "component_name": "send_to_memory", "dependencies": [], "enabled": true},
-    {"component_type": "command", "component_name": "send_to_relay", "dependencies": [], "enabled": false}
-  ],
-  "entry_point": "plugin.py",
-  "min_core_version": "1.0.0",
-  "display_name": "send_to",
-  "categories": ["tool"],
-  "tags": ["tool", "chat", "relay", "summary", "memory", "cross-stream"]
+    "name": "send_to",
+    "version": "3.0.7",
+    "description": "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入",
+    "author": "MoFox Team",
+    "license": "GPL-3.0",
+    "dependencies": {
+        "plugins": [],
+        "components": []
+    },
+    "include": [
+        {
+            "component_type": "service",
+            "component_name": "send_to",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "action",
+            "component_name": "send_to",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "action",
+            "component_name": "send_to_execute",
+            "dependencies": [],
+            "enabled": false
+        },
+        {
+            "component_type": "action",
+            "component_name": "send_to_update_stream_summary",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "action",
+            "component_name": "send_to_relay_intent",
+            "dependencies": [],
+            "enabled": false
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_list_groups",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_list_users",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_lookup_users",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_find_stream",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_get_stream_context",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_get_daily_memory",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_lookup_user_memory",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "tool",
+            "component_name": "send_to_lookup_user_context",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "event_handler",
+            "component_name": "send_to_auto_summary",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "event_handler",
+            "component_name": "send_to_auto_context_inject",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "event_handler",
+            "component_name": "send_to_wander",
+            "description": "监听消息事件，由 sub_actor 决策是否主动串门（默认关闭）",
+            "dependencies": [],
+            "enabled": false
+        },
+        {
+            "component_type": "command",
+            "component_name": "send_to_memory",
+            "dependencies": [],
+            "enabled": true
+        },
+        {
+            "component_type": "command",
+            "component_name": "send_to_relay",
+            "dependencies": [],
+            "enabled": false
+        }
+    ],
+    "entry_point": "plugin.py",
+    "min_core_version": "1.0.0",
+    "display_name": "send_to",
+    "categories": [
+        "tool"
+    ],
+    "tags": [
+        "tool",
+        "chat",
+        "relay",
+        "summary",
+        "memory",
+        "cross-stream"
+    ]
 }
