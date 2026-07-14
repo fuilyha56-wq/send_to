@@ -23,6 +23,7 @@ from typing import Any
 from src.app.plugin_system.api import prompt_api
 from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.base import BaseEventHandler
+from src.app.plugin_system.types import EventType
 from src.core.models.sql_alchemy import ChatStreams, Messages
 from src.kernel.db import QueryBuilder
 from src.kernel.event import EventDecision
@@ -621,7 +622,7 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
     handler_description: str = "在 prompt 构建时自动注入跨流上下文，使 LLM 能看到另一侧的近期对话"
     weight: int = 5
     intercept_message: bool = False
-    init_subscribe: list[str] = ["on_prompt_build"]
+    init_subscribe: list[EventType | str] = [EventType.ON_PROMPT_BUILD]
 
     _recent_queries: dict[str, float]  # stream_id -> last_query_time
 
