@@ -410,7 +410,7 @@ class SendToFindStreamTool(BaseTool):
                     return True, "\n".join([
                         "找到目标流（按 ID 直接生成，暂无摘要）：",
                         f"target_stream_id: \"{sid}\"",
-                        f"target_platform: \"qq\"",
+                        "target_platform: \"qq\"",
                         f"chat_type: {ctype}",
                         f"target_{'group' if ctype == 'group' else 'user'}_id: \"{tid}\"",
                         "summary: (暂无摘要)",

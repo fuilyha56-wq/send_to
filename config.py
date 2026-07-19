@@ -76,7 +76,7 @@ class SendToConfig(BaseConfig):
             description="是否启用 send_to 插件",
         )
         version: str = Field(
-            default="3.0.5",
+            default="3.0.9",
             description="插件版本",
             disabled=True,
         )
@@ -162,6 +162,10 @@ class SendToConfig(BaseConfig):
         max_summary_chars: int = Field(
             default=480,
             description="单条摘要最大字符数",
+        )
+        retention_days: int = Field(
+            default=3,
+            description="跨流摘要和待摘要消息的保留天数，超过后自动删除并重新积累",
         )
 
     @config_section("daily_memory", title="每日短期记忆", tag="ai")

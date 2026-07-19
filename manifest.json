@@ -1,6 +1,6 @@
 {
     "name": "send_to",
-    "version": "3.0.7",
+    "version": "3.0.9",
     "description": "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入",
     "author": "MoFox Team",
     "license": "GPL-3.0",

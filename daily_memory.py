@@ -37,7 +37,7 @@ from src.core.models.message import Message
 from .config import SendToConfig
 from .privacy import _check_list
 from .utils import get_config as _get_config
-from .utils import get_or_create_lock, trim_text as _trim_text
+from .utils import get_or_create_lock, send_streaming_text, trim_text as _trim_text
 
 if TYPE_CHECKING:
     pass
@@ -436,8 +436,7 @@ async def _generate_full_day_summary(
 
     request.add_payload(LLMPayload(ROLE.USER, Text(user_text)))
 
-    response = await request.send(stream=False)
-    summary_text = str(response.message or "").strip()
+    summary_text = await send_streaming_text(request)
     if not summary_text:
         logger.warning(
             f"[daily_memory] stream={state.stream_id} date={memory_date} LLM 返回空，跳过"

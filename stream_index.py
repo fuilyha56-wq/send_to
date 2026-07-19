@@ -12,14 +12,15 @@ from __future__ import annotations
 import asyncio
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+import time
 from typing import Any
 
 from src.app.plugin_system.api import llm_api, prompt_api, storage_api
+from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.types import LLMPayload, ROLE, Text
 from src.core.models.message import Message
 
 
-from .config import SendToConfig
 from .daily_memory import get_today_memory_for_stream
 from .privacy import (
     should_collect_message,
@@ -27,7 +28,9 @@ from .privacy import (
     should_show_in_reminder,
 )
 from .utils import get_config as _get_config
-from .utils import get_or_create_lock, trim_text
+from .utils import get_or_create_lock, send_streaming_text, trim_text
+
+logger = get_logger("send_to.stream_index")
 
 
 def _trim_text(text: str, max_chars: int) -> str:
@@ -129,6 +132,31 @@ def _deserialize_pending_record(data: dict[str, Any]) -> PendingMessageRecord | 
     )
 
 
+def _retention_cutoff(plugin: Any, now: float | None = None) -> float:
+    """计算实时跨流数据的过期时间戳。"""
+
+    config = _get_config(plugin)
+    retention_days = max(0, int(config.index.retention_days))
+    if retention_days == 0:
+        return 0.0
+    return (time.time() if now is None else now) - retention_days * 86400
+
+
+def _record_updated_timestamp(record: StreamSummaryRecord) -> float:
+    """解析摘要更新时间，无法解析时视为无有效时间。"""
+
+    try:
+        return datetime.fromisoformat(record.updated_at).timestamp()
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _is_summary_expired(record: StreamSummaryRecord, cutoff: float) -> bool:
+    """判断摘要是否超过配置保留时间。"""
+
+    return cutoff > 0 and _record_updated_timestamp(record) < cutoff
+
+
 def _stream_name_from_message(message: "Message", direction: str) -> str:
     """尽量从消息中推导聊天流名称。"""
 
@@ -204,12 +232,18 @@ async def _load_pending_messages(plugin: Any, stream_id: str) -> list[PendingMes
         return []
 
     result: list[PendingMessageRecord] = []
+    cutoff = _retention_cutoff(plugin)
     for item in raw_items:
         if not isinstance(item, dict):
             continue
         record = _deserialize_pending_record(item)
-        if record is not None:
+        if record is not None and (cutoff <= 0 or record.timestamp >= cutoff):
             result.append(record)
+    if len(result) != len(raw_items):
+        if result:
+            await _save_pending_messages(plugin, stream_id, result)
+        else:
+            await storage_api.delete_json(plugin.plugin_name, _pending_key(stream_id))
     return result
 
 
@@ -285,11 +319,7 @@ async def _generate_updated_summary(
         )
     )
 
-    response = await request.send(stream=False)
-    summary_text = str(response.message or "").strip()
-    if not summary_text:
-        raise ValueError("自动摘要生成了空结果")
-    return summary_text
+    return await send_streaming_text(request)
 
 
 def _resolve_summary_meta(
@@ -339,17 +369,49 @@ async def list_summary_records(plugin: Any) -> list[StreamSummaryRecord]:
 
     keys = await storage_api.list_json(plugin.plugin_name)
     records: list[StreamSummaryRecord] = []
+    cutoff = _retention_cutoff(plugin)
     for key in keys:
         if not key.startswith("summary_"):
             continue
         record = _deserialize_record(
             await storage_api.load_json(plugin.plugin_name, key)
         )
-        if record is not None:
-            records.append(record)
+        if record is None or _is_summary_expired(record, cutoff):
+            await storage_api.delete_json(plugin.plugin_name, key)
+            continue
+        records.append(record)
 
     records.sort(key=lambda item: item.updated_at, reverse=True)
     return records
+
+
+async def cleanup_expired_stream_index(plugin: Any) -> tuple[int, int]:
+    """清理过期摘要和待摘要缓冲，返回各自删除数量。"""
+
+    keys = await storage_api.list_json(plugin.plugin_name)
+    cutoff = _retention_cutoff(plugin)
+    if cutoff <= 0:
+        return 0, 0
+
+    expired_summaries = 0
+    expired_pending = 0
+    for key in keys:
+        if key.startswith("summary_"):
+            record = _deserialize_record(
+                await storage_api.load_json(plugin.plugin_name, key)
+            )
+            if record is None or _is_summary_expired(record, cutoff):
+                if await storage_api.delete_json(plugin.plugin_name, key):
+                    expired_summaries += 1
+        elif key.startswith("pending_"):
+            stream_id = key.removeprefix("pending_")
+            before = await storage_api.load_json(plugin.plugin_name, key)
+            raw_items = before.get("messages", []) if isinstance(before, dict) else []
+            remaining = await _load_pending_messages(plugin, stream_id)
+            if raw_items and not remaining:
+                expired_pending += 1
+
+    return expired_summaries, expired_pending
 
 
 
@@ -470,6 +532,12 @@ async def collect_message_for_auto_summary(
                 previous_summary,
                 current_batch,
             )
+            if not updated_summary:
+                logger.warning(
+                    f"自动摘要模型返回空结果，保留待处理消息等待重试: "
+                    f"stream_id={stream_id}, batch_size={len(current_batch)}"
+                )
+                break
             resolved_stream_id, stream_name, platform, chat_type, prev_target_id = _resolve_summary_meta(
                 previous_record,
                 current_batch,

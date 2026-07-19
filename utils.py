@@ -18,6 +18,15 @@ from typing import Any
 from .config import SendToConfig
 
 
+async def send_streaming_text(request: Any) -> str:
+    """以流式模式发送 LLM 请求并消费全部事件，返回最终可见文本。"""
+
+    response = await request.send(stream=True)
+    async for _event in response.stream_events():
+        pass
+    return str(response.message or "").strip()
+
+
 def get_config(plugin: Any) -> SendToConfig:
     """从插件实例读取配置，失败时回退默认配置。"""
 

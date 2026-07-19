@@ -20,7 +20,12 @@ from .config import SendToConfig
 from .daily_memory import run_archive_loop
 from .event_handler import SendToAutoSummaryHandler
 from .service import SendToService
-from .stream_index import ACTOR_REMINDER_BUCKET, ACTOR_REMINDER_NAME, sync_actor_reminder
+from .stream_index import (
+    ACTOR_REMINDER_BUCKET,
+    ACTOR_REMINDER_NAME,
+    cleanup_expired_stream_index,
+    sync_actor_reminder,
+)
 from .tools import (
     ListGroupsTool,
     ListUsersTool,
@@ -42,7 +47,7 @@ class SendToPlugin(BasePlugin):
 
     plugin_name: str = "send_to"
     plugin_description: str = "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入"
-    plugin_version: str = "3.0.7"
+    plugin_version: str = "3.0.9"
 
     configs: list[type] = [SendToConfig]
     dependent_components: list[str] = []
@@ -103,6 +108,13 @@ class SendToPlugin(BasePlugin):
             return
         # 初始化实例属性（避免可变默认值在类级共享）
         self._registered_schedules = []
+        if config.index.enabled:
+            expired_summaries, expired_pending = await cleanup_expired_stream_index(self)
+            if expired_summaries or expired_pending:
+                logger.info(
+                    f"已清理过期跨流数据: 摘要 {expired_summaries} 条, "
+                    f"待摘要缓冲 {expired_pending} 条"
+                )
         if config.index.enabled and config.index.inject_summary_reminder:
             await sync_actor_reminder(self, current_chat_type="group")
         else:

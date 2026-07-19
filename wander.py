@@ -34,6 +34,8 @@ from src.kernel.logger import get_logger
 if TYPE_CHECKING:
     from .config import SendToConfig
 
+from .utils import send_streaming_text
+
 logger = get_logger("send_to.wander")
 
 
@@ -309,9 +311,7 @@ async def _llm_decide(
         request.add_payload(LLMPayload(ROLE.SYSTEM, Text(sys_prompt)))
         request.add_payload(LLMPayload(ROLE.USER, Text(user_prompt)))
 
-        response = await request.send(stream=False)
-
-        content = (response.message or "").strip()
+        content = await send_streaming_text(request)
         if not content:
             return None
 
