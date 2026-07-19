@@ -120,8 +120,8 @@ def _build_tool_descriptor(tool_cls: type) -> ToolDescriptor:
     """构建单个 tool 的描述符。"""
 
     return ToolDescriptor(
-        name=tool_cls.tool_name,
-        description=tool_cls.tool_description,
+        name=tool_cls.name,
+        description=tool_cls.description,
         params=_extract_param_descriptors(tool_cls),
         returns={
             "type": "tuple[bool, str | dict]",
@@ -137,8 +137,8 @@ class SendToService(BaseService):
     并通过 ``list()`` 提供自描述能力，调用方无需翻阅文档即可发现可用能力。
 
     Class Attributes:
-        service_name: 服务名（与 plugin_name 一致，便于通过签名调用）
-        service_description: 服务描述
+        name: 服务名（与 plugin_name 一致，便于通过签名调用）
+        description: 服务描述
         version: 服务版本
 
     Examples:
@@ -148,8 +148,8 @@ class SendToService(BaseService):
         >>> ok, result = await service.invoke("send_to_list_groups", {"limit": 10})
     """
 
-    service_name: str = "send_to"
-    service_description: str = "跨聊天流查询/发送服务，统一暴露 send_to 插件所有 tool"
+    name: str = "send_to"
+    description: str = "跨聊天流查询/发送服务，统一暴露 send_to 插件所有 tool"
     version: str = "1.0.0"
 
     _descriptors_cache: list[ToolDescriptor] | None = None
@@ -211,13 +211,13 @@ class SendToService(BaseService):
 
     async def invoke(
         self,
-        tool_name: str,
+        name: str,
         params: dict[str, Any] | None = None,
     ) -> tuple[bool, Any]:
         """通过名称调用 tool。
 
         Args:
-            tool_name: tool 名称（如 ``"send_to_list_groups"``）
+            name: tool 名称（如 ``"send_to_list_groups"``）
             params: 关键字参数字典，将原样传给 ``tool.execute``
 
         Returns:
@@ -258,6 +258,6 @@ class SendToService(BaseService):
         """按名称查找 tool 类。"""
 
         for tool_cls in cls._registered_tool_classes():
-            if getattr(tool_cls, "tool_name", None) == tool_name:
+            if getattr(tool_cls, "name", None) == tool_name:
                 return tool_cls
         return None

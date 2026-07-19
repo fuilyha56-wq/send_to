@@ -230,8 +230,8 @@ async def _resolve_stream_id(
 class SendToAction(BaseAction):
     """跨聊天流发送文本消息的 Action。"""
 
-    action_name: str = "send_to"
-    action_description: str = (
+    name: str = "send_to"
+    description: str = (
         "向**其他**聊天流（非当前会话）发送一条文本消息。"
         "使用场景：当前在 A 聊天，需要主动把消息转告或发送给 B 聊天（群或某人私聊）。"
         "如果只是回复当前会话，请不要使用这个动作。"
@@ -395,8 +395,8 @@ async def _build_target_message(
 class SendToExecuteAction(BaseAction):
     """跨聊天流执行 Action：在目标聊天流中执行指定动作（如画图、查询等）。"""
 
-    action_name: str = "send_to_execute"
-    action_description: str = (
+    name: str = "send_to_execute"
+    description: str = (
         "在**其他**聊天流中执行一个指定的 Action（动作）。"
         "与 send_to（仅发文本）不同，此动作用于触发另一个流的某个能力，"
         "例如在私聊里触发画图、查天气、执行命令等。"
@@ -611,8 +611,8 @@ class SendToExecuteAction(BaseAction):
 class SendToSummaryUpdateAction(BaseAction):
     """为当前聊天流写入最新摘要并同步跨流 reminder。"""
 
-    action_name: str = "send_to_update_stream_summary"
-    action_description: str = (
+    name: str = "send_to_update_stream_summary"
+    description: str = (
         "为当前聊天流写入最新摘要，并同步到 send_to 的跨聊天流 system reminder。"
         "仅当当前摘要明显失真、遗漏关键事实或需要立刻记录跨流约定时调用。"
         "输入必须是客观、完整、覆盖旧摘要的新摘要。"
@@ -641,8 +641,8 @@ class SendToSummaryUpdateAction(BaseAction):
 class SendToRelayIntentAction(BaseAction):
     """跨聊天流转告：将意图和上下文注入另一个聊天流。"""
 
-    action_name: str = "send_to_relay_intent"
-    action_description: str = (
+    name: str = "send_to_relay_intent"
+    description: str = (
         "跨聊天流意识迁移/转告能力。与 send_to 直接发文本不同，"
         "此 Action 会把开场白、来源上下文和内部提示注入目标流，由目标流的 bot 自然续接。"
         "调用前建议先用 send_to_find_stream 获取 target_stream_id / target_user_id / target_group_id。"

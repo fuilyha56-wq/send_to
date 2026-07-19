@@ -618,8 +618,8 @@ class SendToAutoContextInjectHandler(BaseEventHandler):
     与结构化 context_contributions 通道，注入该用户另一侧聊天流的近期消息。
     """
 
-    handler_name: str = "send_to_auto_context_inject"
-    handler_description: str = "在 prompt 构建时自动注入跨流上下文，使 LLM 能看到另一侧的近期对话"
+    name: str = "send_to_auto_context_inject"
+    description: str = "在 prompt 构建时自动注入跨流上下文，使 LLM 能看到另一侧的近期对话"
     weight: int = 5
     intercept_message: bool = False
     init_subscribe: list[EventType | str] = [EventType.ON_PROMPT_BUILD]

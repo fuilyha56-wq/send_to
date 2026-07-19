@@ -64,8 +64,8 @@ go=false 时 target_stream_id 与 content 必须为 null。
 class SendToConfig(BaseConfig):
     """send_to 综合跨流插件配置。"""
 
-    config_name: ClassVar[str] = "config"
-    config_description: ClassVar[str] = "send_to 跨聊天流发送、上下文、记忆与转告配置"
+    name: ClassVar[str] = "config"
+    description: ClassVar[str] = "send_to 跨聊天流发送、上下文、记忆与转告配置"
 
     @config_section("plugin", title="插件设置", tag="plugin")
     class PluginSection(SectionBase):

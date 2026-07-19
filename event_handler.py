@@ -20,8 +20,8 @@ logger = get_logger("send_to.event_handler")
 class SendToAutoSummaryHandler(BaseEventHandler):
     """收集消息并按批次触发自动摘要，同时驱动每日短期记忆。"""
 
-    handler_name: str = "send_to_auto_summary"
-    handler_description: str = "按消息批次自动刷新跨流摘要，并按轮次/闲置时间触发每日短期记忆"
+    name: str = "send_to_auto_summary"
+    description: str = "按消息批次自动刷新跨流摘要，并按轮次/闲置时间触发每日短期记忆"
     weight: int = 0
     intercept_message: bool = False
     init_subscribe: list[EventType | str] = [EventType.ON_MESSAGE_RECEIVED, EventType.ON_MESSAGE_SENT]

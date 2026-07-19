@@ -25,8 +25,8 @@ def _clamp(value: int, *, lo: int, hi: int) -> int:
 class ListGroupsTool(BaseTool):
     """列出 bot 可见的群，供 LLM 选择目标。"""
 
-    tool_name: str = "send_to_list_groups"
-    tool_description: str = "列出 bot 可见的群聊，可按群名或 group_id 模糊过滤。"
+    name: str = "send_to_list_groups"
+    description: str = "列出 bot 可见的群聊，可按群名或 group_id 模糊过滤。"
 
     async def execute(
         self,
@@ -79,8 +79,8 @@ class ListGroupsTool(BaseTool):
 class ListUsersTool(BaseTool):
     """列出 bot 已知用户，供 LLM 选择私聊目标。"""
 
-    tool_name: str = "send_to_list_users"
-    tool_description: str = "列出 bot 已知用户，可按昵称、群名片或 user_id 模糊过滤。"
+    name: str = "send_to_list_users"
+    description: str = "列出 bot 已知用户，可按昵称、群名片或 user_id 模糊过滤。"
 
     async def execute(
         self,
@@ -140,8 +140,8 @@ class ListUsersTool(BaseTool):
 class LookupUsersTool(BaseTool):
     """按昵称/群名片查找用户候选。"""
 
-    tool_name: str = "send_to_lookup_users"
-    tool_description: str = "在 PersonInfo 中按昵称/群名片查找用户候选。"
+    name: str = "send_to_lookup_users"
+    description: str = "在 PersonInfo 中按昵称/群名片查找用户候选。"
 
     async def execute(
         self,
@@ -171,8 +171,8 @@ class LookupUsersTool(BaseTool):
 class SendToStreamContextTool(BaseTool):
     """查询其他聊天流的原始上下文。"""
 
-    tool_name: str = "send_to_get_stream_context"
-    tool_description: str = "按聊天流名称、索引或 stream_id 查询其他聊天流最近原始消息和摘要。"
+    name: str = "send_to_get_stream_context"
+    description: str = "按聊天流名称、索引或 stream_id 查询其他聊天流最近原始消息和摘要。"
     chatter_allow: list[str] = []
 
     async def execute(
@@ -249,8 +249,8 @@ class SendToStreamContextTool(BaseTool):
 class SendToDailyMemoryTool(BaseTool):
     """查询群聊每日短期记忆。"""
 
-    tool_name: str = "send_to_get_daily_memory"
-    tool_description: str = "查询某个群最近若干天的短期记忆（日总结），用于补全摘要细节。"
+    name: str = "send_to_get_daily_memory"
+    description: str = "查询某个群最近若干天的短期记忆（日总结），用于补全摘要细节。"
     chatter_allow: list[str] = []
 
     async def execute(
@@ -340,8 +340,8 @@ class SendToDailyMemoryTool(BaseTool):
 class SendToFindStreamTool(BaseTool):
     """把名称、索引、QQ号、群号反查为目标流参数。"""
 
-    tool_name: str = "send_to_find_stream"
-    tool_description: str = "跨流发送/转告前置查找工具，返回 stream_id、platform、chat_type、target_id 和摘要。"
+    name: str = "send_to_find_stream"
+    description: str = "跨流发送/转告前置查找工具，返回 stream_id、platform、chat_type、target_id 和摘要。"
     chatter_allow: list[str] = []
 
     async def execute(
@@ -466,8 +466,8 @@ class SendToFindStreamTool(BaseTool):
 class SendToUserMemoryTool(BaseTool):
     """从长期记忆中检索用户相关内容。"""
 
-    tool_name: str = "send_to_lookup_user_memory"
-    tool_description: str = "按平台用户检索长期记忆，用于跨私聊/群聊了解同一用户背景和事件。"
+    name: str = "send_to_lookup_user_memory"
+    description: str = "按平台用户检索长期记忆，用于跨私聊/群聊了解同一用户背景和事件。"
 
     async def execute(self, platform: Annotated[str, "平台标识"], user_id: Annotated[str, "目标用户 ID"] = "", user_hint: Annotated[str, "用户昵称/群名片"] = "", query: Annotated[str, "检索关键词"] = "", top_n: Annotated[int, "最多返回数量"] = 0, include_archived: Annotated[bool, "是否包含归档"] = False) -> tuple[bool, str | dict[str, Any]]:
         from .context_lookup import lookup_user_memory
@@ -478,8 +478,8 @@ class SendToUserMemoryTool(BaseTool):
 class SendToUserContextTool(BaseTool):
     """从聊天流中抓取用户相关上下文。"""
 
-    tool_name: str = "send_to_lookup_user_context"
-    tool_description: str = "按平台用户从私聊与群聊聊天流中抓取近期上下文，标注 target_user/bot/other。"
+    name: str = "send_to_lookup_user_context"
+    description: str = "按平台用户从私聊与群聊聊天流中抓取近期上下文，标注 target_user/bot/other。"
 
     async def execute(self, platform: Annotated[str, "平台标识"], user_id: Annotated[str, "目标用户 ID"] = "", user_hint: Annotated[str, "用户昵称/群名片"] = "", chat_scope: Annotated[str, "private/group/all"] = "all", group_id: Annotated[str, "限定群 ID"] = "", per_stream_limit: Annotated[int, "每流消息数"] = 0, max_streams: Annotated[int, "最大流数量"] = 0, around_user: Annotated[bool, "围绕用户发言截取"] = True, max_chars_per_message: Annotated[int, "单条消息长度"] = 0) -> tuple[bool, str | dict[str, Any]]:
         from .context_lookup import lookup_user_context

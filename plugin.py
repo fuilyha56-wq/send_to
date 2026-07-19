@@ -50,7 +50,7 @@ class SendToPlugin(BasePlugin):
     plugin_version: str = "3.0.9"
 
     configs: list[type] = [SendToConfig]
-    dependent_components: list[str] = []
+    dependencies: list[str] = []
 
     _archive_stop_event: asyncio.Event | None = None
     # 已注册的 UnifiedScheduler task_name 列表，卸载时按名清理避免闭包泄漏

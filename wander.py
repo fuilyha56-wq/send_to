@@ -343,8 +343,8 @@ async def _llm_decide(
 class WanderEventHandler(BaseEventHandler):
     """串门事件处理器：监听消息，决策是否主动去其他流发言。"""
 
-    handler_name: str = "send_to_wander"
-    handler_description: str = "观察消息时按 sub_actor 决策偶尔主动串门到其他聊天流"
+    name: str = "send_to_wander"
+    description: str = "观察消息时按 sub_actor 决策偶尔主动串门到其他聊天流"
     weight: int = 5
     intercept_message: bool = False
     init_subscribe: list[EventType | str] = [EventType.ON_MESSAGE_RECEIVED]

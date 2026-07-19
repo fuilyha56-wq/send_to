@@ -14,7 +14,7 @@ Service 组件模板（Neo-MoFox 架构）—— 符合"一个 service 暴露所
     {author}            作者
     {date}              创建日期
     {class_name}        类名（PascalCase）
-    {component_name}    组件名（snake_case，作为 service_name）
+    {component_name}    组件名（snake_case，作为 name）
 """
 
 SERVICE_TEMPLATE = '''"""
@@ -110,8 +110,8 @@ def _build_tool_descriptor(tool_cls: type) -> ToolDescriptor:
     """构建单个 tool 的描述符。"""
 
     return ToolDescriptor(
-        name=tool_cls.tool_name,
-        description=tool_cls.tool_description,
+        name=tool_cls.name,
+        description=tool_cls.description,
         params=_extract_param_descriptors(tool_cls),
         returns={{
             "type": "tuple[bool, str | dict]",
@@ -134,8 +134,8 @@ class {class_name}(BaseService):
         ok, result = await service.invoke("tool_name", {{"param": "value"}})
     """
 
-    service_name = "{component_name}"
-    service_description = "{description}"
+    name = "{component_name}"
+    description = "{description}"
     version = "1.0.0"
 
     _descriptors_cache: list[ToolDescriptor] | None = None
@@ -241,7 +241,7 @@ class {class_name}(BaseService):
         """按名称查找 tool 类。"""
 
         for tool_cls in cls._registered_tool_classes():
-            if getattr(tool_cls, "tool_name", None) == tool_name:
+            if getattr(tool_cls, "name", None) == tool_name:
                 return tool_cls
         return None
 '''
