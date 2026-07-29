@@ -1,9 +1,9 @@
 {
     "name": "send_to",
-    "version": "3.0.9",
+    "version": "3.0.11",
     "description": "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入",
     "author": "MoFox Team",
-    "license": "GPL-3.0",
+    "license": "AGPL-3.0",
     "dependencies": {
         "plugins": [],
         "components": []
@@ -120,7 +120,7 @@
         }
     ],
     "entry_point": "plugin.py",
-    "min_core_version": "1.0.0",
+    "api_version": "1.0.0",
     "display_name": "send_to",
     "categories": [
         "tool"

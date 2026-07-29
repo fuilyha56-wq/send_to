@@ -278,4 +278,4 @@ python -c "from plugins.send_to.plugin import SendToPlugin; print(SendToPlugin.p
 
 ## 许可证
 
-GPL-3.0
+AGPL-3.0

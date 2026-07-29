@@ -148,8 +148,8 @@ class SendToService(BaseService):
         >>> ok, result = await service.invoke("send_to_list_groups", {"limit": 10})
     """
 
-    name: str = "send_to"
-    description: str = "跨聊天流查询/发送服务，统一暴露 send_to 插件所有 tool"
+    service_name: str = "send_to"
+    service_description: str = "跨聊天流查询/发送服务，统一暴露 send_to 插件所有 tool"
     version: str = "1.0.0"
 
     _descriptors_cache: list[ToolDescriptor] | None = None
