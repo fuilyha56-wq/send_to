@@ -45,6 +45,11 @@ htmlcov/
 config/local_*.toml
 *.log
 
-# Agent / Claude 工作目录（不纳入版本控制）
-.claude
-.agents
+# Agent 工作目录（不纳入版本控制）
+.claude/
+.agents/
+.mimosa/
+
+# Runtime data / media cache
+data/
+media_cache/

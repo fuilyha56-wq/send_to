@@ -19,6 +19,7 @@ from src.app.plugin_system.api import llm_api, prompt_api, storage_api
 from src.app.plugin_system.api.log_api import get_logger
 from src.app.plugin_system.types import LLMPayload, ROLE, Text
 from src.core.models.message import Message
+from src.core.prompt import SystemReminderInsertType
 
 
 from .daily_memory import get_today_memory_for_stream
@@ -28,7 +29,12 @@ from .privacy import (
     should_show_in_reminder,
 )
 from .utils import get_config as _get_config
-from .utils import get_or_create_lock, send_streaming_text, trim_text
+from .utils import (
+    get_or_create_lock,
+    override_model_set_tokens,
+    send_streaming_text,
+    trim_text,
+)
 
 logger = get_logger("send_to.stream_index")
 
@@ -40,6 +46,11 @@ def _trim_text(text: str, max_chars: int) -> str:
 
 ACTOR_REMINDER_BUCKET = "actor"
 ACTOR_REMINDER_NAME = "跨聊天流上下文摘要"
+
+# 上一次写入 store 的 reminder 文本。该 reminder 在每条消息事件上都会被
+# 重建，但内容通常没变；跳过无变化的 store 写入可避免下游 context manager
+# 误认为 reminder 发生了更新。
+_last_synced_reminder_text: str | None = None
 
 _stream_locks: dict[str, asyncio.Lock] = {}
 
@@ -282,6 +293,9 @@ async def _generate_updated_summary(
 
     config = _get_config(plugin)
     model_set = llm_api.get_model_set_by_task(config.index.auto_summary_task_name)
+    # 思考链模型的推理输出同样计入 max_tokens 预算，任务配置过小时正文会被
+    # 截断为空；这里按配置下限抬升（拷贝条目，不污染全局任务配置）。
+    model_set = override_model_set_tokens(model_set, config.index.auto_summary_max_tokens)
     request = llm_api.create_llm_request(
         model_set=model_set,
         request_name=f"send_to_auto_summary_{stream_id[:8]}",
@@ -526,12 +540,22 @@ async def collect_message_for_auto_summary(
         while len(pending_messages) >= batch_size:
             current_batch = pending_messages[:batch_size]
             previous_summary = previous_record.summary if previous_record is not None else ""
-            updated_summary = await _generate_updated_summary(
-                plugin,
-                stream_id,
-                previous_summary,
-                current_batch,
-            )
+            try:
+                updated_summary = await _generate_updated_summary(
+                    plugin,
+                    stream_id,
+                    previous_summary,
+                    current_batch,
+                )
+            except Exception as error:
+                # 关键：异常时不能中断本流程，否则本轮刚收集的 pending_record
+                # 不会被持久化（_save_pending_messages 在循环之后），消息将永久
+                # 丢失于后续摘要。这里改为保留批次、下条消息到达时自动重试。
+                logger.error(
+                    f"自动摘要 LLM 调用失败，保留 {len(pending_messages)} 条待处理消息等待重试: "
+                    f"stream_id={stream_id}, error={error}"
+                )
+                break
             if not updated_summary:
                 logger.warning(
                     f"自动摘要模型返回空结果，保留待处理消息等待重试: "
@@ -632,7 +656,7 @@ def build_actor_reminder(
         "3. 摘要内容：必须保留与你强相关的设定、核心话题、关键背景、已确认事实、用户偏好、未完成的跨流事项及下一步计划。",
         "4. 严禁流水账：摘要应精炼且具备导向性，方便另一个流的你快速进入状态。",
         "",
-        f"以下为最近可见的聊天流摘要（最多 {max(0, visible_stream_limit)} 条，按更新时间倒序）：",
+        f"以下为最近活跃的聊天流摘要（最多 {max(0, visible_stream_limit)} 条，条目顺序固定）："
     ]
 
     filtered_records = [
@@ -642,6 +666,11 @@ def build_actor_reminder(
     ]
 
     visible_records = filtered_records[: max(0, visible_stream_limit)]
+    # 可见性按 updated_at 近期优先筛选，但渲染按 stream_id 稳定排序：
+    # 任何一条摘要更新都不再重排整个索引文本。这是前缀缓存友好的关键——
+    # 框架会把 reminder 文本整段嵌入 user payload，顺序抖动会让所有
+    # chatter（含 KFC 等订阅 actor 桶的自定义 chatter）的已缓存前缀失效。
+    visible_records = sorted(visible_records, key=lambda record: record.stream_id)
     if not visible_records:
         lines.append("- 当前没有可见的聊天流摘要。")
     else:
@@ -712,12 +741,21 @@ async def sync_actor_reminder(
         today_memory_summary=today_memory_summary,
         today_memory_date=today_memory_date,
     )
+    global _last_synced_reminder_text
+    if reminder_text == _last_synced_reminder_text:
+        return reminder_text
     try:
         prompt_api.add_system_reminder(
             ACTOR_REMINDER_BUCKET,
             ACTOR_REMINDER_NAME,
             reminder_text,
+            # 必须用 DYNAMIC（尾部 user payload）而不是默认 FIXED（首部）：
+            # 摘要索引内容会随自动摘要频繁变化，FIXED 会把它嵌进对话最前面的
+            # user payload，导致其后所有历史的前缀缓存整体失效（缓存命中恒为
+            # system 段的固定长度）；DYNAMIC 让变化只影响当前轮尾部。
+            insert_type=SystemReminderInsertType.DYNAMIC,
         )
+        _last_synced_reminder_text = reminder_text
     except Exception as error:
         # 某些 chatter（如 NFC）使用自定义 context_manager，不支持动态 reminder 注入
         # 这种情况下静默失败，不影响主流程

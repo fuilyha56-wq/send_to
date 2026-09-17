@@ -155,6 +155,14 @@ class SendToConfig(BaseConfig):
             default="utils",
             description="自动摘要使用的模型任务名",
         )
+        auto_summary_max_tokens: int = Field(
+            default=0,
+            description=(
+                "自动摘要单次请求的最大输出 token 数，0 表示沿用任务配置；"
+                "任务配置的 max_tokens 小于该值时按该值覆盖（思考链模型建议 ≥4096，"
+                "否则思考链可能耗尽预算导致正文为空）"
+            ),
+        )
         visible_stream_limit: int = Field(
             default=12,
             description="reminder 中最多注入多少条流摘要",
@@ -187,6 +195,13 @@ class SendToConfig(BaseConfig):
         task_name: str = Field(
             default="actor",
             description="生成短期记忆使用的模型任务名",
+        )
+        max_tokens: int = Field(
+            default=0,
+            description=(
+                "短期记忆单次请求的最大输出 token 数下限，0 表示沿用任务配置；"
+                "任务配置的 max_tokens 小于该值时按该值抬升（思考链模型建议 ≥4096）"
+            ),
         )
         max_query_days: int = Field(
             default=3,

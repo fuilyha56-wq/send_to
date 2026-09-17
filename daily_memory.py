@@ -37,7 +37,8 @@ from src.core.models.message import Message
 from .config import SendToConfig
 from .privacy import _check_list
 from .utils import get_config as _get_config
-from .utils import get_or_create_lock, send_streaming_text, trim_text as _trim_text
+from .utils import get_or_create_lock, override_model_set_tokens, send_streaming_text
+from .utils import trim_text as _trim_text
 
 if TYPE_CHECKING:
     pass
@@ -330,6 +331,8 @@ async def _generate_full_day_summary(
     persona_prompt = _build_persona_prompt()
 
     model_set = llm_api.get_model_set_by_task(config.daily_memory.task_name)
+    # 与自动摘要同理：思考链计入 max_tokens 预算，任务配置过小时正文被截断为空
+    model_set = override_model_set_tokens(model_set, config.daily_memory.max_tokens)
     request = llm_api.create_llm_request(
         model_set=model_set,
         request_name=f"send_to_daily_memory_{state.stream_id[:8]}_{memory_date}",
