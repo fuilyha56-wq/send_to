@@ -10,6 +10,7 @@ import pytest
 
 from plugins.send_to.config import SendToConfig
 from plugins.send_to import stream_index
+from plugins.send_to import utils as utils_module
 
 
 class MemoryStorage:
@@ -88,6 +89,7 @@ async def test_cleanup_removes_expired_realtime_data_only(monkeypatch: pytest.Mo
         }
     )
     monkeypatch.setattr(stream_index, "storage_api", storage)
+    monkeypatch.setattr(utils_module, "storage_api", storage)
     monkeypatch.setattr(stream_index.time, "time", lambda: now)
 
     result = await stream_index.cleanup_expired_stream_index(_plugin())
@@ -114,6 +116,7 @@ async def test_pending_messages_keep_only_unexpired_items(monkeypatch: pytest.Mo
         }
     )
     monkeypatch.setattr(stream_index, "storage_api", storage)
+    monkeypatch.setattr(utils_module, "storage_api", storage)
     monkeypatch.setattr(stream_index.time, "time", lambda: now)
 
     records = await stream_index._load_pending_messages(_plugin(), "stream-1")

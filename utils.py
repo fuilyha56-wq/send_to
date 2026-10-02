@@ -14,10 +14,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from datetime import datetime
 from typing import Any
 
+from src.app.plugin_system.api import storage_api
 from src.app.plugin_system.api.log_api import get_logger
 
 from .config import SendToConfig
@@ -229,3 +231,28 @@ def check_list_membership(
     if list_type == "whitelist":
         return target in normalized_list
     return target not in normalized_list
+
+
+async def safe_load_json(plugin: Any, key: str) -> dict[str, Any] | None:
+    """读取插件 JSON 存储，键不存在或内容损坏时返回 None。
+
+    宿主 JSONStore.save 先以 "w" 模式清空文件再写内容，进程在写入中途被杀
+    （崩溃、断电、强停）会留下 0 字节文件；此后每次 json.loads 都抛
+    JSONDecodeError 并阻断正常流程。这里将其降级为告警 + 视同不存在，
+    让调用方走"新建"分支自动重建该键，实现自愈。
+
+    Args:
+        plugin: 插件实例（取 plugin_name 作为存储命名空间）。
+        key: 存储键名（不含 .json 后缀）。
+
+    Returns:
+        数据字典；键不存在、内容为空或 JSON 损坏时返回 None。
+    """
+
+    try:
+        return await storage_api.load_json(plugin.plugin_name, key)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        logger.warning(
+            f"[send_to] 存储键 {key} 内容损坏（{exc}），已忽略并将在下次写入时重建"
+        )
+        return None

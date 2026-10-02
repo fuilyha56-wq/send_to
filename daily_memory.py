@@ -36,8 +36,13 @@ from src.core.models.message import Message
 
 from .config import SendToConfig
 from .privacy import _check_list
-from .utils import get_config as _get_config
-from .utils import get_or_create_lock, override_model_set_tokens, send_streaming_text
+from .utils import (
+    get_config as _get_config,
+    get_or_create_lock,
+    override_model_set_tokens,
+    safe_load_json,
+    send_streaming_text,
+)
 from .utils import trim_text as _trim_text
 
 if TYPE_CHECKING:
@@ -487,7 +492,7 @@ async def _save_state(plugin: Any, state: DailyState) -> None:
 async def _load_state_of(plugin: Any, stream_id: str) -> DailyState | None:
     """读取指定 stream 的状态。"""
 
-    return _load_state(await storage_api.load_json(plugin.plugin_name, _state_key(stream_id)))
+    return _load_state(await safe_load_json(plugin, _state_key(stream_id)))
 
 
 def _is_group_allowed(config: SendToConfig, group_id: str) -> bool:
@@ -633,7 +638,7 @@ async def list_all_states(plugin: Any) -> list[DailyState]:
     for key in keys:
         if not key.startswith("daily_state_"):
             continue
-        state = _load_state(await storage_api.load_json(plugin.plugin_name, key))
+        state = _load_state(await safe_load_json(plugin, key))
         if state is not None:
             states.append(state)
     return states
@@ -721,7 +726,7 @@ async def list_recent_memories(
             continue
         if d < earliest_allowed or d > today:
             continue
-        record = _load_record(await storage_api.load_json(plugin.plugin_name, key))
+        record = _load_record(await safe_load_json(plugin, key))
         if record is not None:
             records.append(record)
     records.sort(key=lambda r: r.memory_date, reverse=True)
@@ -735,9 +740,7 @@ async def get_memory(
 ) -> DailyMemoryRecord | None:
     """读取指定日期的短期记忆（不做天数限制，由调用方控制）。"""
 
-    return _load_record(
-        await storage_api.load_json(plugin.plugin_name, _memory_key(stream_id, memory_date))
-    )
+    return _load_record(await safe_load_json(plugin, _memory_key(stream_id, memory_date)))
 
 
 async def get_today_memory_for_stream(

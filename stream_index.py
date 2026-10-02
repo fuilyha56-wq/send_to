@@ -32,6 +32,7 @@ from .utils import get_config as _get_config
 from .utils import (
     get_or_create_lock,
     override_model_set_tokens,
+    safe_load_json,
     send_streaming_text,
     trim_text,
 )
@@ -388,7 +389,7 @@ async def list_summary_records(plugin: Any) -> list[StreamSummaryRecord]:
         if not key.startswith("summary_"):
             continue
         record = _deserialize_record(
-            await storage_api.load_json(plugin.plugin_name, key)
+            await safe_load_json(plugin, key)
         )
         if record is None or _is_summary_expired(record, cutoff):
             await storage_api.delete_json(plugin.plugin_name, key)
@@ -412,14 +413,14 @@ async def cleanup_expired_stream_index(plugin: Any) -> tuple[int, int]:
     for key in keys:
         if key.startswith("summary_"):
             record = _deserialize_record(
-                await storage_api.load_json(plugin.plugin_name, key)
+                await safe_load_json(plugin, key)
             )
             if record is None or _is_summary_expired(record, cutoff):
                 if await storage_api.delete_json(plugin.plugin_name, key):
                     expired_summaries += 1
         elif key.startswith("pending_"):
             stream_id = key.removeprefix("pending_")
-            before = await storage_api.load_json(plugin.plugin_name, key)
+            before = await safe_load_json(plugin, key)
             raw_items = before.get("messages", []) if isinstance(before, dict) else []
             remaining = await _load_pending_messages(plugin, stream_id)
             if raw_items and not remaining:
@@ -445,7 +446,7 @@ async def _upsert_summary_record(
     config = _get_config(plugin)
     normalized_summary = _trim_text(summary, config.index.max_summary_chars)
     key = _record_key(stream_id)
-    previous = _deserialize_record(await storage_api.load_json(plugin.plugin_name, key))
+    previous = _deserialize_record(await safe_load_json(plugin, key))
 
     record = StreamSummaryRecord(
         stream_id=stream_id,
@@ -533,7 +534,7 @@ async def collect_message_for_auto_summary(
         pending_messages.append(pending_record)
 
         previous_record = _deserialize_record(
-            await storage_api.load_json(plugin.plugin_name, _record_key(stream_id))
+            await safe_load_json(plugin, _record_key(stream_id))
         )
         changed = False
 
@@ -582,7 +583,7 @@ async def collect_message_for_auto_summary(
                 )
             ) or changed
             previous_record = _deserialize_record(
-                await storage_api.load_json(plugin.plugin_name, _record_key(stream_id))
+                await safe_load_json(plugin, _record_key(stream_id))
             )
             pending_messages = pending_messages[batch_size:]
 
