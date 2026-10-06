@@ -1,6 +1,6 @@
 {
     "name": "send_to",
-    "version": "3.0.14",
+    "version": "3.0.15",
     "description": "跨聊天流发送、执行、上下文索引、短期记忆、relay 转告与可选自动注入",
     "author": "MoFox Team",
     "license": "AGPL-3.0",
@@ -131,7 +131,7 @@
         "send_api": "1.0.0",
         "service_api": "1.0.0",
         "storage_api": "1.0.0",
-        "stream_api": "1.0.0"
+        "stream_api": "2.0.0"
     },
     "display_name": "send_to",
     "categories": [
@@ -145,4 +145,5 @@
         "memory",
         "cross-stream"
     ]
-}
+}
+
